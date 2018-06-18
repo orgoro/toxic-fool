@@ -3,3 +3,4 @@ sklearn
 git-lfs
 pylint
 pytest
+travis

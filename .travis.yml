@@ -15,4 +15,4 @@ script:
   py.test
 
 after_success:
-  - pylint
+  pylint toxic_fool/ --rcfile=pylint.rc --output-format=parseable
