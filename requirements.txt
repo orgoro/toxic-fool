@@ -1,3 +1,5 @@
 tensorflow
 sklearn
 git-lfs
+pylint
+pytest
