@@ -4,8 +4,8 @@ python:
   - "3.6"
 
 branches:
-  only:
-    - master
+  except:
+    - legacy
 
 install:
   - travis_retry pip install pylint
