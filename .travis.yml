@@ -14,5 +14,5 @@ install:
   - travis_retry pip install -r requirements.txt
 
 script:
-  - py.test
+  - py.test --runslow
   - pylint toxic_fool/agents/ toxic_fool/models toxic_fool/attacks toxic_fool/data toxic_fool/logs --rcfile=pylint.rc --output-format=parseable
