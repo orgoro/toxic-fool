@@ -4,3 +4,5 @@ git-lfs
 pylint
 pytest
 travis
+pandas
+keras
