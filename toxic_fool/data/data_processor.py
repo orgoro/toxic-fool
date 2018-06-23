@@ -8,7 +8,6 @@ import numpy as np
 import re
 import unicodedata
 from os import path
-import pickle
 
 import resources as res
 import resources_out as out
