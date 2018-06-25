@@ -12,10 +12,46 @@ from os import path
 import resources as res
 import resources_out as out
 
+SEQ_TRAIN_DUMP = 'seq_train.npy'
+SEQ_VAL_DUMP = 'seq_val.npy'
+SEQ_TEST_DUMP = 'seq_test.npy'
+
+LBL_TRAIN_DUMP = 'lbl_train.npy'
+LBL_VAL_DUMP = 'lbl_val.npy'
+LBL_TEST_DUMP = 'lbl_test.npy'
+
+
+class Dataset(object):
+
+    def __init__(self,
+                 train_seq, train_lbl,
+                 val_seq, val_lbl,
+                 test_seq, test_lbl):
+        self.train_seq = train_seq
+        self.val_seq = val_seq
+        self.test_seq = test_seq
+        self.train_lbl = train_lbl
+        self.val_lbl = val_lbl
+        self.test_lbl = test_lbl
+
+    @classmethod
+    def init_from_dump(cls, folder=out.RES_OUT_DIR):
+        assert path.isdir(folder), '{} is not a dir'.format(folder)
+        train_seq = np.load(path.join(out.RES_OUT_DIR, SEQ_TRAIN_DUMP))
+        val_seq = np.load(path.join(out.RES_OUT_DIR, SEQ_VAL_DUMP))
+        test_seq = np.load(path.join(out.RES_OUT_DIR, SEQ_TEST_DUMP))
+        train_lbl = np.load(path.join(out.RES_OUT_DIR, LBL_TRAIN_DUMP))
+        val_lbl = np.load(path.join(out.RES_OUT_DIR, LBL_VAL_DUMP))
+
+        print('dataset loaded from {}...'.format(folder))
+        return cls(train_seq=train_seq, train_lbl=train_lbl, val_seq=val_seq, val_lbl=val_lbl,
+                   test_seq=test_seq, test_lbl=None)
+
 
 class DataProcessor(object):
 
-    def __init__(self, train_d=res.TRAIN_CSV_PATH, test_d=res.TEST_CSV_PATH, clean_text=True, pad_seq=True):
+    def __init__(self, train_d=res.TRAIN_CSV_PATH, test_d=res.TEST_CSV_PATH,
+                 clean_text=True, pad_seq=True):
         # type: (str, str, str) -> None
         self._train_d = pd.read_csv(train_d)
         self._test_d = pd.read_csv(test_d)
@@ -32,6 +68,7 @@ class DataProcessor(object):
         self.seq_test = None  # type: np.ndarray
         self.labels_train = None  # type: np.ndarray
         self.labels_val = None  # type: np.ndarray
+        self.labels_test = None  # type: np.ndarray
 
     @staticmethod
     def _clean_text(text):
@@ -82,20 +119,39 @@ class DataProcessor(object):
     def get_tokens(self):
         return self._tokenizer.word_index.keys()
 
-    def dump_seq(self):
+    def dump_dataset(self):
         print('saving sequences to: ', out.RES_OUT_DIR)
-        np.save(path.join(out.RES_OUT_DIR, 'seq_train.npy'), self.seq_train)
-        np.save(path.join(out.RES_OUT_DIR, 'seq_val.npy'), self.seq_val)
-        np.save(path.join(out.RES_OUT_DIR, 'seq_test.npy'), self.seq_test)
+        np.save(path.join(out.RES_OUT_DIR, SEQ_TRAIN_DUMP), self.seq_train)
+        np.save(path.join(out.RES_OUT_DIR, SEQ_VAL_DUMP), self.seq_val)
+        np.save(path.join(out.RES_OUT_DIR, SEQ_TEST_DUMP), self.seq_test)
+        np.save(path.join(out.RES_OUT_DIR, LBL_TRAIN_DUMP), self.labels_train)
+        np.save(path.join(out.RES_OUT_DIR, LBL_VAL_DUMP), self.labels_val)
+        # np.save(path.join(out.RES_OUT_DIR, LBL_TEST_DUMP), self.labels_test)
+
+    def get_dataset(self):
+        # type: () -> Dataset
+        dataset = Dataset(train_seq=self.seq_train, train_lbl=self.labels_train,
+                          val_seq=self.labels_val, val_lbl=self.labels_val,
+                          test_seq=self.seq_test, test_lbl=None)
+        return dataset
 
 
 def example():
+    # pylint: disable=unused-variable
     data_pro = DataProcessor()
     data_pro.process_data()
     print('tokens: {}'.format(list(data_pro.get_tokens())))
     print('first sequence: {} \n{}'.format(data_pro.seq_train[0].shape, data_pro.seq_train[0]))
     print('first label: {}'.format(data_pro.labels_train[0]))
-    data_pro.dump_seq()
+
+    # get dataset
+    dataset = data_pro.get_dataset()
+
+    # dump
+    data_pro.dump_dataset()
+
+    # load
+    dataset_loaded = Dataset.init_from_dump()
 
 
 if __name__ == '__main__':
