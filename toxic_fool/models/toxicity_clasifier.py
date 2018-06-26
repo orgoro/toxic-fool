@@ -30,6 +30,6 @@ class ToxicityClassifier(object):
         # type: (np.ndarray) -> np.ndarray
         raise NotImplementedError('implemented by child')
 
-    def get_f1_score(self, seq, lbls):
+    def get_f1_score(self, seqs, lbls):
         # type: (np.ndarray, np.ndarray) -> np.ndarray
         raise NotImplementedError('implemented by child')
