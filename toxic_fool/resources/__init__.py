@@ -4,6 +4,7 @@ from __future__ import print_function
 
 from os import path
 
+from .embedding import  CHAR_EMBEDDING_PATH, EMBEDDING_DIR , EMBEDDING_DIM
 RESOURCES_DIR = path.dirname(path.abspath(__file__))
 
 TEST_LBLS_CSV_PATH = path.join(RESOURCES_DIR, 'data', 'test_labels.csv')
