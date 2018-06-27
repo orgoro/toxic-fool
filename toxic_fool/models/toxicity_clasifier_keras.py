@@ -24,8 +24,9 @@ class ToxicityClassifierKeras(ToxicityClassifier):
         super(ToxicityClassifierKeras, self).__init__(session=session, max_seq=max_seq, padded=padded)
 
     def embedding_layer(self, tensor):
+        # TODO consider change to trainable=False
         emb = layers.Embedding(input_dim=self._num_tokens, output_dim=self._embed_dim, input_length=self._max_seq,
-                               trainable=True, mask_zero=False , weights=[self.embedding_matrix]) #TODO consider change to trainable=False
+                               trainable=True, mask_zero=False , weights=[self.embedding_matrix])
         return emb(tensor)
 
     def spatial_dropout_layer(self, tensor, rate=0.25):
@@ -129,7 +130,8 @@ def example():
     sess = tf.Session()
     embedding_matrix = Dataset.init_embedding_from_dump()
     num_tokens , embed_dim = embedding_matrix.shape
-    tox_model = ToxicityClassifierKeras(session=sess, max_seq=1000, num_tokens=num_tokens, embed_dim=embed_dim, padded=True,embedding_matrix = embedding_matrix)
+    tox_model = ToxicityClassifierKeras(session=sess, max_seq=1000, num_tokens=num_tokens, embed_dim=embed_dim,
+                                        padded=True,embedding_matrix = embedding_matrix)
     grad = tox_model.get_gradient()
     print(grad)
 
