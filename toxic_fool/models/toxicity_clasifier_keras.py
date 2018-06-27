@@ -14,18 +14,19 @@ from models.toxicity_clasifier import ToxicityClassifier
 
 class ToxicityClassifierKeras(ToxicityClassifier):
 
-    def __init__(self, session, max_seq, padded, num_tokens, embed_dim):
+    def __init__(self, session, max_seq, padded, num_tokens, embed_dim,embedding_matrix):
         # type: (tf.Session, np.int, bool) -> None
         self._num_tokens = num_tokens
         self._embed_dim = embed_dim
         self._input_layer = None
         self._output_layer = None
-        self._embedding = None
+        self._embedding = embedding_matrix
         super(ToxicityClassifierKeras, self).__init__(session=session, max_seq=max_seq, padded=padded)
 
     def embedding_layer(self, tensor):
+        # TODO consider change to trainable=False
         emb = layers.Embedding(input_dim=self._num_tokens, output_dim=self._embed_dim, input_length=self._max_seq,
-                               trainable=True, mask_zero=False)  # TODO: , weights=[weights])
+                               trainable=True, mask_zero=False , weights=[self._embedding])
         return emb(tensor)
 
     def spatial_dropout_layer(self, tensor, rate=0.25):
@@ -129,8 +130,12 @@ class ToxicityClassifierKeras(ToxicityClassifier):
 
 def example():
     sess = tf.Session()
+    embedding_matrix = data.Dataset.init_embedding_from_dump()
+    num_tokens , embed_dim = embedding_matrix.shape
     max_seq = 1000
-    tox_model = ToxicityClassifierKeras(session=sess, max_seq=max_seq, num_tokens=75, embed_dim=20, padded=True)
+    tox_model = ToxicityClassifierKeras(session=sess, max_seq=max_seq, num_tokens=num_tokens, embed_dim=embed_dim,
+                                        padded=True,embedding_matrix = embedding_matrix)
+
 
     dataset = data.Dataset.init_from_dump()
     seq = np.expand_dims(dataset.train_seq[0, :], 0)
