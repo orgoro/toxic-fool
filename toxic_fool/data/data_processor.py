@@ -20,6 +20,7 @@ LBL_TRAIN_DUMP = 'lbl_train.npy'
 LBL_VAL_DUMP = 'lbl_val.npy'
 LBL_TEST_DUMP = 'lbl_test.npy'
 
+CHAR_EMBEDDING_TEST_DUMP = 'char_embedding.npy'
 
 class Dataset(object):
 
@@ -33,6 +34,10 @@ class Dataset(object):
         self.train_lbl = train_lbl
         self.val_lbl = val_lbl
         self.test_lbl = test_lbl
+
+    @classmethod
+    def init_embedding_from_dump(cls, folder=out.RES_OUT_DIR):
+        return np.load(path.join(out.RES_OUT_DIR, CHAR_EMBEDDING_TEST_DUMP))
 
     @classmethod
     def init_from_dump(cls, folder=out.RES_OUT_DIR):
@@ -77,6 +82,39 @@ class DataProcessor(object):
         clean = exp.sub('', formatted)
         return clean
 
+    def get_char_list_and_emedding_index(self):
+        embeddings_index = {}
+        char_data = res.CHAR_EMBEDDING_PATH
+        f = open(char_data)
+        char_list = []
+        for line in f:
+            values = line.split()
+            curr_char = values[0]
+            char_list.append(curr_char)
+            value = np.asarray(values[1:], dtype='float32')
+            embeddings_index[curr_char] = value
+        f.close()
+
+        return char_list , embeddings_index
+
+    def create_embedding_matrix(self, embeddings_index):
+        char_index = self._tokenizer.word_index #it's actually char and not word. TODO consider fix
+        embedding_matrix = np.zeros((len(char_index) + 1, res.EMBEDDING_DIM))
+        for char, i in char_index.items():
+            embedding_vector = embeddings_index.get(char)
+            embedding_matrix[i] = embedding_vector[:res.EMBEDDING_DIM]
+
+        return embedding_matrix
+
+    def check_all_data_char_in_embedding(self, text_train , text_test, embeddings_index): #TODO move to test
+        data_tokanizer = text.Tokenizer(char_level=True, lower=True)
+        data_tokanizer.fit_on_texts(texts=list(text_test) + list(text_train))
+        char_index = data_tokanizer.word_index
+        for char, i in char_index.items():
+            embedding_vector = embeddings_index.get(char)
+            if embedding_vector is None:
+                raise ValueError('embedding problem, there are char in data which does not exist in embedding.')
+
     def process_data(self):
         text_train = self._train_d["comment_text"].fillna("no comment").values
         text_test = self._test_d["comment_text"].fillna("no comment").values
@@ -86,7 +124,15 @@ class DataProcessor(object):
             text_test = np.asarray([self._clean_text(t) for t in text_test])
 
         print('fitting tokenizer...')
-        self._tokenizer.fit_on_texts(texts=list(text_test) + list(text_train))
+        char_list, embeddings_index = self.get_char_list_and_emedding_index()
+        self._tokenizer.fit_on_texts(texts=char_list)
+
+        self.check_all_data_char_in_embedding(text_train, text_test, embeddings_index)
+
+        self.embedding_matrix = self.create_embedding_matrix(embeddings_index)
+
+
+        #self._tokenizer.fit_on_texts(texts=list(text_test) + list(text_train))
         print('done fitting! unique tokens found: {}'.format(len(self._tokenizer.word_index.keys())))
 
         n_elem = len(text_train)
@@ -127,6 +173,7 @@ class DataProcessor(object):
         np.save(path.join(out.RES_OUT_DIR, LBL_TRAIN_DUMP), self.labels_train)
         np.save(path.join(out.RES_OUT_DIR, LBL_VAL_DUMP), self.labels_val)
         # np.save(path.join(out.RES_OUT_DIR, LBL_TEST_DUMP), self.labels_test)
+        np.save(path.join(out.RES_OUT_DIR, CHAR_EMBEDDING_TEST_DUMP), self.embedding_matrix)
 
     def get_dataset(self):
         # type: () -> Dataset

@@ -8,24 +8,24 @@ import keras
 from keras import backend as K
 from keras import layers
 
-import data
+from data import DataProcessor, Dataset
 from models.toxicity_clasifier import ToxicityClassifier
 
 
 class ToxicityClassifierKeras(ToxicityClassifier):
 
-    def __init__(self, session, max_seq, padded, num_tokens, embed_dim):
+    def __init__(self, session, max_seq, padded, num_tokens, embed_dim,embedding_matrix):
         # type: (tf.Session, np.int, bool) -> None
         self._num_tokens = num_tokens
-        self._embed_dim = embed_dim
+        self._embed_dim = embed_dim #TODO remove
         self._input_layer = None
         self._output_layer = None
-        self._embedding = None
+        self.embedding_matrix = embedding_matrix
         super(ToxicityClassifierKeras, self).__init__(session=session, max_seq=max_seq, padded=padded)
 
     def embedding_layer(self, tensor):
         emb = layers.Embedding(input_dim=self._num_tokens, output_dim=self._embed_dim, input_length=self._max_seq,
-                               trainable=True, mask_zero=False)  # TODO: , weights=[weights])
+                               trainable=True, mask_zero=False , weights=[self.embedding_matrix]) #TODO consider change to trainable=False
         return emb(tensor)
 
     def spatial_dropout_layer(self, tensor, rate=0.25):
@@ -71,8 +71,8 @@ class ToxicityClassifierKeras(ToxicityClassifier):
 
         # embed:
         self._input_layer = keras.Input(shape=(self._max_seq,), dtype='int32')
-        self._embedding = self.embedding_layer(self._input_layer)
-        dropout1 = self.spatial_dropout_layer(self._embedding)
+        embedding = self.embedding_layer(self._input_layer)
+        dropout1 = self.spatial_dropout_layer(embedding)
 
         # rnn:
         rnn1 = self.bidirectional_rnn(dropout1)
@@ -93,14 +93,14 @@ class ToxicityClassifierKeras(ToxicityClassifier):
 
         model = keras.Model(inputs=self._input_layer, outputs=self._output_layer)
         adam_optimizer = keras.optimizers.Adam(lr=1e-3, decay=1e-6, clipvalue=5)
-        model.compile(loss='binary_crossentropy', optimizer=adam_optimizer, metrics=['accuracy', 'ce'])
+        model.compile(loss='binary_crossentropy', optimizer=adam_optimizer, metrics=['accuracy','ce'])
         model.summary()
         return model
 
     def train(self, dataset):
-        # type: (data.Dataset) -> None
-        result = self._model.fit(x=dataset.train_seq[:3001, :], y=dataset.train_lbl[:3001, :], batch_size=500,
-                                 validation_data=(dataset.val_seq, dataset.val_lbl))
+        # type: (process.Dataset) -> None
+        result = self._model.fit(x=dataset.train_seq[:, :], y=dataset.train_lbl[:, :], batch_size=500,
+                              validation_data=(dataset.val_seq, dataset.val_lbl))
         print(result)
         return result
 
@@ -109,45 +109,37 @@ class ToxicityClassifierKeras(ToxicityClassifier):
         prediction = self._model.predict(seq)
         return prediction
 
-    def get_f1_score(self, seqs, lbls):
+    def get_f1_score(self, seq, lbls):
         # type: (np.ndarray, np.ndarray) -> np.ndarray
         raise NotImplementedError('implemented by child')
 
-    def get_gradient(self, seq):
-        grad_0 = K.gradients(loss=self._model.output[:, 0], variables=self._embedding)[0]
-        grad_1 = K.gradients(loss=self._model.output[:, 1], variables=self._embedding)[0]
-        grad_2 = K.gradients(loss=self._model.output[:, 2], variables=self._embedding)[0]
-        grad_3 = K.gradients(loss=self._model.output[:, 3], variables=self._embedding)[0]
-        grad_4 = K.gradients(loss=self._model.output[:, 4], variables=self._embedding)[0]
-        grad_5 = K.gradients(loss=self._model.output[:, 5], variables=self._embedding)[0]
+    def get_gradient(self):
+        grad_0 = K.gradients(loss=self._input_layer[0, ...], variables=[self._output_layer[0, :1]])
+        grad_1 = K.gradients(loss=self._input_layer, variables=[self._output_layer[0, 1]])
+        grad_2 = K.gradients(loss=self._input_layer, variables=[self._output_layer[0, 2]])
+        grad_3 = K.gradients(loss=self._input_layer, variables=[self._output_layer[0, 3]])
+        grad_4 = K.gradients(loss=self._input_layer, variables=[self._output_layer[0, 4]])
+        grad_5 = K.gradients(loss=self._input_layer, variables=[self._output_layer[0, 5]])
 
-        grads = [grad_0, grad_1, grad_2, grad_3, grad_4, grad_5]
-        fn = K.function(inputs=[self._model.input], outputs=grads)
-
-        return fn([seq])
+        # fn = K.function([self._output_layer[0, 1], K.gradients(self._input_layer, [self._output_layer[0, 1]))
+        return grad_0, grad_1, grad_2, grad_3, grad_4, grad_5
 
 
 def example():
     sess = tf.Session()
-    max_seq = 1000
-    tox_model = ToxicityClassifierKeras(session=sess, max_seq=max_seq, num_tokens=75, embed_dim=20, padded=True)
+    embedding_matrix = Dataset.init_embedding_from_dump()
+    num_tokens , embed_dim = embedding_matrix.shape
+    tox_model = ToxicityClassifierKeras(session=sess, max_seq=1000, num_tokens=num_tokens, embed_dim=embed_dim, padded=True,embedding_matrix = embedding_matrix)
+    grad = tox_model.get_gradient()
+    print(grad)
 
-    dataset = data.Dataset.init_from_dump()
-    seq = np.expand_dims(dataset.train_seq[0, :], 0)
-    grad_tox = tox_model.get_gradient(seq)[0]
-    grad_norm = np.linalg.norm(grad_tox, axis=2)
-    print('max grad location {}/{}'.format(np.argmax(grad_norm, axis=1), max_seq))
+    dataset = Dataset.init_from_dump()
 
-    classes = tox_model.classify(seq)
+    classes = tox_model.classify(np.expand_dims(dataset.train_seq[0, :], 0))
     print(classes)
 
     tox_model.train(dataset)
-    classes = tox_model.classify(seq)
-    seq = dataset.train_seq[0, :]
-    grad_tox = tox_model.get_gradient(seq)[0]
-    grad_norm = np.linalg.norm(grad_tox, axis=2)
-    print('max grad location {}/{}'.format(np.argmax(grad_norm, axis=1), max_seq))
-
+    classes = tox_model.classify(np.expand_dims(dataset.train_seq[0, :], 0))
     print(classes)
     true_classes = dataset.train_lbl[0, :]
     print(true_classes)
