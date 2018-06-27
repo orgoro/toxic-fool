@@ -36,7 +36,7 @@ class Dataset(object):
         self.test_lbl = test_lbl
 
     @classmethod
-    def init_embedding_from_dump(cls, folder=out.RES_OUT_DIR):
+    def init_embedding_from_dump(cls):
         return np.load(path.join(out.RES_OUT_DIR, CHAR_EMBEDDING_TEST_DUMP))
 
     @classmethod
@@ -110,7 +110,7 @@ class DataProcessor(object):
         data_tokanizer = text.Tokenizer(char_level=True, lower=True)
         data_tokanizer.fit_on_texts(texts=list(text_test) + list(text_train))
         char_index = data_tokanizer.word_index
-        for char, i in char_index.items():
+        for char, _ in char_index.items():
             embedding_vector = embeddings_index.get(char)
             if embedding_vector is None:
                 raise ValueError('embedding problem, there are char in data which does not exist in embedding.')
