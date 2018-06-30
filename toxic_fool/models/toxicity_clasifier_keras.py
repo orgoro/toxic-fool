@@ -7,10 +7,97 @@ import tensorflow as tf
 import keras
 from keras import backend as K
 from keras import layers
+from keras.engine import InputSpec, Layer
+from keras import initializers
+
+
 
 import data
 from models.toxicity_clasifier import ToxicityClassifier
 
+class AttentionWeightedAverage(Layer):
+    """
+    Computes a weighted average of the different channels across timesteps.
+    Uses 1 parameter pr. channel to compute the attention value for a single timestep.
+    """
+
+    def __init__(self, return_attention=False, **kwargs):
+        self.init = initializers.get('uniform')
+        self.supports_masking = True
+        self.return_attention = return_attention
+        super(AttentionWeightedAverage, self).__init__(** kwargs)
+
+    def build(self, input_shape):
+        self.input_spec = [InputSpec(ndim=3)]
+        assert len(input_shape) == 3
+
+        self.W = self.add_weight(shape=(input_shape[2], 1),
+                                 name='{}_W'.format(self.name),
+                                 initializer=self.init)
+        self.trainable_weights = [self.W]
+        super(AttentionWeightedAverage, self).build(input_shape)
+
+    def call(self, x, mask=None):
+        # computes a probability distribution over the timesteps
+        # uses 'max trick' for numerical stability
+        # reshape is done to avoid issue with Tensorflow
+        # and 1-dimensional weights
+        logits = K.dot(x, self.W)
+        x_shape = K.shape(x)
+        logits = K.reshape(logits, (x_shape[0], x_shape[1]))
+        ai = K.exp(logits - K.max(logits, axis=-1, keepdims=True))
+
+        # masked timesteps have zero weight
+        if mask is not None:
+            mask = K.cast(mask, K.floatx())
+            ai = ai * mask
+        att_weights = ai / (K.sum(ai, axis=1, keepdims=True) + K.epsilon())
+        weighted_input = x * K.expand_dims(att_weights)
+        result = K.sum(weighted_input, axis=1)
+        if self.return_attention:
+            return [result, att_weights]
+        return result
+
+    def get_output_shape_for(self, input_shape):
+        return self.compute_output_shape(input_shape)
+
+    def compute_output_shape(self, input_shape):
+        output_len = input_shape[2]
+        if self.return_attention:
+            return [(input_shape[0], output_len), (input_shape[0], input_shape[1])]
+        return (input_shape[0], output_len)
+
+    def compute_mask(self, input, input_mask=None):
+        if isinstance(input_mask, list):
+            return [None] * len(input_mask)
+        else:
+            return None
+
+class CalcAccuracy(object):
+    @staticmethod
+    def recall(y_true, y_pred):
+        true_positives = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
+        possible_positives = K.sum(y_true)
+        recall = true_positives / (possible_positives + K.epsilon())
+        return recall
+
+    @staticmethod
+    def precision(y_true, y_pred):
+        true_positives = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
+        predicted_positives = K.sum(K.round(K.clip(y_pred, 0, 1)))
+        precision = true_positives / (predicted_positives + K.epsilon())
+        return precision
+
+    @staticmethod
+    def f1(y_true, y_pred):
+        precision = CalcAccuracy.precision(y_true, y_pred)
+        recall = CalcAccuracy.recall(y_true, y_pred)
+        return 2 * ((precision * recall) / (precision + recall + K.epsilon()))
+
+class CustomLoss(object):
+    @staticmethod
+    def binary_crossentropy_with_bias(y_true,y_pred):
+        return K.mean(K.binary_crossentropy(y_true, y_pred), axis=-1) + 0.01*K.sum(y_true)
 
 class ToxicityClassifierKeras(ToxicityClassifier):
 
@@ -57,7 +144,8 @@ class ToxicityClassifierKeras(ToxicityClassifier):
         return avgpool(tensor)
 
     def attention_layer(self, tensor):
-        raise NotImplementedError
+        atten = AttentionWeightedAverage()
+        return atten(tensor)
 
     def dense_layer(self, tensor, out_size=144):
         dense = layers.Dense(out_size, activation='relu')
@@ -84,8 +172,8 @@ class ToxicityClassifierKeras(ToxicityClassifier):
         avgpool = self.avg_polling_layer(concat)
         maxpool = self.max_polling_layer(concat)
         last_stage = self.last_stage(concat)
-        # TODO: add attention atten = self.attention_layer(concat)
-        all_views = self.concat_layer([last_stage, maxpool, avgpool], axis=1)
+        atten = self.attention_layer(concat)
+        all_views = self.concat_layer([last_stage, maxpool, avgpool,atten], axis=1)
 
         # classify:
         dropout2 = self.dropout_layer(all_views)
@@ -94,7 +182,7 @@ class ToxicityClassifierKeras(ToxicityClassifier):
 
         model = keras.Model(inputs=self._input_layer, outputs=self._output_layer)
         adam_optimizer = keras.optimizers.Adam(lr=1e-3, decay=1e-6, clipvalue=5)
-        model.compile(loss='binary_crossentropy', optimizer=adam_optimizer, metrics=['accuracy', 'ce'])
+        model.compile(loss=CustomLoss.binary_crossentropy_with_bias, optimizer=adam_optimizer, metrics=['accuracy', 'ce', CalcAccuracy.precision, CalcAccuracy.recall, CalcAccuracy.f1])
         model.summary()
         return model
 
