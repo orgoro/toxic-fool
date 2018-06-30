@@ -22,6 +22,7 @@ LBL_TEST_DUMP = 'lbl_test.npy'
 
 CHAR_EMBEDDING_TEST_DUMP = 'char_embedding.npy'
 
+
 class Dataset(object):
 
     def __init__(self,
@@ -61,7 +62,7 @@ class DataProcessor(object):
         self._train_d = pd.read_csv(train_d)
         self._test_d = pd.read_csv(test_d)
         # self._test_l = pd.read_csv(test_l)
-        self._max_seq_len = 1000
+        self._max_seq_len = 400
         self._tokenizer = text.Tokenizer(char_level=True, lower=True)  # TODO: max number of words
 
         self.processed = False  # True after data processing
@@ -74,15 +75,17 @@ class DataProcessor(object):
         self.labels_train = None  # type: np.ndarray
         self.labels_val = None  # type: np.ndarray
         self.labels_test = None  # type: np.ndarray
+        self._embedding_matrix = None  # type: np.ndarray
 
     @staticmethod
-    def _clean_text(text):
-        formatted = str(unicodedata.normalize('NFKD', text).encode('ascii', 'ignore'))
+    def _clean_text(text_seqs):
+        formatted = str(unicodedata.normalize('NFKD', text_seqs).encode('ascii', 'ignore'))
         exp = re.compile(r'[^(a-z\d\!\@\#\$\%\^\&\*\=\?)*]', re.IGNORECASE)
         clean = exp.sub('', formatted)
         return clean
 
-    def get_char_list_and_emedding_index(self):
+    @staticmethod
+    def get_char_list_and_embedding_index():
         embeddings_index = {}
         char_data = res.CHAR_EMBEDDING_PATH
         f = open(char_data)
@@ -95,10 +98,10 @@ class DataProcessor(object):
             embeddings_index[curr_char] = value
         f.close()
 
-        return char_list , embeddings_index
+        return char_list, embeddings_index
 
     def create_embedding_matrix(self, embeddings_index):
-        char_index = self._tokenizer.word_index #it's actually char and not word. TODO consider fix
+        char_index = self._tokenizer.word_index  # it's actually char and not word. TODO consider fix
         embedding_matrix = np.zeros((len(char_index) + 1, res.EMBEDDING_DIM))
         for char, i in char_index.items():
             embedding_vector = embeddings_index.get(char)
@@ -106,7 +109,8 @@ class DataProcessor(object):
 
         return embedding_matrix
 
-    def check_all_data_char_in_embedding(self, text_train , text_test, embeddings_index): #TODO move to test
+    @staticmethod
+    def check_all_data_char_in_embedding(text_train, text_test, embeddings_index):  # TODO move to test
         data_tokanizer = text.Tokenizer(char_level=True, lower=True)
         data_tokanizer.fit_on_texts(texts=list(text_test) + list(text_train))
         char_index = data_tokanizer.word_index
@@ -124,15 +128,12 @@ class DataProcessor(object):
             text_test = np.asarray([self._clean_text(t) for t in text_test])
 
         print('fitting tokenizer...')
-        char_list, embeddings_index = self.get_char_list_and_emedding_index()
+        char_list, embeddings_index = self.get_char_list_and_embedding_index()
         self._tokenizer.fit_on_texts(texts=char_list)
-
         self.check_all_data_char_in_embedding(text_train, text_test, embeddings_index)
+        self._embedding_matrix = self.create_embedding_matrix(embeddings_index)
 
-        self.embedding_matrix = self.create_embedding_matrix(embeddings_index)
-
-
-        #self._tokenizer.fit_on_texts(texts=list(text_test) + list(text_train))
+        # self._tokenizer.fit_on_texts(texts=list(text_test) + list(text_train))
         print('done fitting! unique tokens found: {}'.format(len(self._tokenizer.word_index.keys())))
 
         n_elem = len(text_train)
@@ -173,7 +174,7 @@ class DataProcessor(object):
         np.save(path.join(out.RES_OUT_DIR, LBL_TRAIN_DUMP), self.labels_train)
         np.save(path.join(out.RES_OUT_DIR, LBL_VAL_DUMP), self.labels_val)
         # np.save(path.join(out.RES_OUT_DIR, LBL_TEST_DUMP), self.labels_test)
-        np.save(path.join(out.RES_OUT_DIR, CHAR_EMBEDDING_TEST_DUMP), self.embedding_matrix)
+        np.save(path.join(out.RES_OUT_DIR, CHAR_EMBEDDING_TEST_DUMP), self._embedding_matrix)
 
     def get_dataset(self):
         # type: () -> Dataset
