@@ -7,6 +7,7 @@ import tensorflow as tf
 import keras
 from keras import backend as K
 from keras import layers
+from matplotlib import pyplot as plt
 
 import data
 from models.toxicity_clasifier import ToxicityClassifier
@@ -14,8 +15,8 @@ from models.toxicity_clasifier import ToxicityClassifier
 
 class ToxicityClassifierKeras(ToxicityClassifier):
 
-    def __init__(self, session, max_seq, padded, num_tokens, embed_dim,embedding_matrix):
-        # type: (tf.Session, np.int, bool) -> None
+    def __init__(self, session, max_seq, padded, num_tokens, embed_dim, embedding_matrix):
+        # type: (tf.Session, np.int, bool, np.int, np.int, np.ndarray) -> None
         self._num_tokens = num_tokens
         self._embed_dim = embed_dim
         self._input_layer = None
@@ -26,14 +27,14 @@ class ToxicityClassifierKeras(ToxicityClassifier):
     def embedding_layer(self, tensor):
         # TODO consider change to trainable=False
         emb = layers.Embedding(input_dim=self._num_tokens, output_dim=self._embed_dim, input_length=self._max_seq,
-                               trainable=True, mask_zero=False , weights=[self._embedding])
+                               trainable=False, mask_zero=False, weights=[self._embedding])
         return emb(tensor)
 
     def spatial_dropout_layer(self, tensor, rate=0.25):
         dropout = layers.SpatialDropout1D(rate=rate)
         return dropout(tensor)
 
-    def dropout_layer(self, tensor, rate=0.5):
+    def dropout_layer(self, tensor, rate=0.7):
         dropout = layers.Dropout(rate=rate)
         return dropout(tensor)
 
@@ -94,16 +95,15 @@ class ToxicityClassifierKeras(ToxicityClassifier):
 
         model = keras.Model(inputs=self._input_layer, outputs=self._output_layer)
         adam_optimizer = keras.optimizers.Adam(lr=1e-3, decay=1e-6, clipvalue=5)
-        model.compile(loss='binary_crossentropy', optimizer=adam_optimizer, metrics=['accuracy', 'ce'])
+        model.compile(loss='binary_crossentropy', optimizer=adam_optimizer, metrics=['accuracy'])
         model.summary()
         return model
 
     def train(self, dataset):
-        # type: (data.Dataset) -> None
-        result = self._model.fit(x=dataset.train_seq[:3001, :], y=dataset.train_lbl[:3001, :], batch_size=500,
-                                 validation_data=(dataset.val_seq, dataset.val_lbl))
-        print(result)
-        return result
+        # type: (data.Dataset) -> keras.callbacks.History
+        history = self._model.fit(x=dataset.train_seq[:3000, :], y=dataset.train_lbl[:3000, :], batch_size=500,
+                                  validation_data=(dataset.val_seq[:1000, :], dataset.val_lbl[:1000, :]), epochs=5)
+        return history
 
     def classify(self, seq):
         # type: (np.ndarray) -> np.ndarray
@@ -128,14 +128,31 @@ class ToxicityClassifierKeras(ToxicityClassifier):
         return fn([seq])
 
 
+def _visualize(history):
+    # type: (keras.callbacks.History) -> None
+    # Get training and test loss histories
+    training_loss = history.history['loss']
+    val_loss = history.history['val_loss']
+
+    # Create count of the number of epochs
+    epoch_count = range(1, len(training_loss) + 1)
+
+    # Visualize loss history
+    plt.plot(epoch_count, training_loss, 'r--')
+    plt.plot(epoch_count, val_loss, 'b-')
+    plt.legend(['Training Loss', 'Test Loss'])
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.show()
+
+
 def example():
     sess = tf.Session()
     embedding_matrix = data.Dataset.init_embedding_from_dump()
-    num_tokens , embed_dim = embedding_matrix.shape
-    max_seq = 1000
+    num_tokens, embed_dim = embedding_matrix.shape
+    max_seq = 400
     tox_model = ToxicityClassifierKeras(session=sess, max_seq=max_seq, num_tokens=num_tokens, embed_dim=embed_dim,
-                                        padded=True,embedding_matrix = embedding_matrix)
-
+                                        padded=True, embedding_matrix=embedding_matrix)
 
     dataset = data.Dataset.init_from_dump()
     seq = np.expand_dims(dataset.train_seq[0, :], 0)
@@ -146,16 +163,17 @@ def example():
     classes = tox_model.classify(seq)
     print(classes)
 
-    tox_model.train(dataset)
-    classes = tox_model.classify(seq)
-    seq = dataset.train_seq[0, :]
+    history = tox_model.train(dataset)
     grad_tox = tox_model.get_gradient(seq)[0]
     grad_norm = np.linalg.norm(grad_tox, axis=2)
     print('max grad location {}/{}'.format(np.argmax(grad_norm, axis=1), max_seq))
 
+    classes = tox_model.classify(seq)
     print(classes)
     true_classes = dataset.train_lbl[0, :]
     print(true_classes)
+
+    _visualize(history=history)
 
 
 if __name__ == '__main__':
