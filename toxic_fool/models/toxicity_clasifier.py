@@ -33,3 +33,11 @@ class ToxicityClassifier(object):
     def get_f1_score(self, seqs, lbls):
         # type: (np.ndarray, np.ndarray) -> np.ndarray
         raise NotImplementedError('implemented by child')
+
+    def get_gradient(self, seq):
+        # type: (np.ndarray) -> np.ndarray
+        """ claculate gradients of d classes/ d input
+        :param seq: text seq tokenized
+        :return: returns array of gradients per class for each seq element
+        """
+        raise NotImplementedError('implemented by child')
