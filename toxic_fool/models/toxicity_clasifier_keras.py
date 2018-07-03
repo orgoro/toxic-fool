@@ -66,8 +66,7 @@ class AttentionWeightedAverage(Layer):
 
     def compute_output_shape(self, input_shape):
         output_len = input_shape[2]
-        return [(input_shape[0], output_len), (input_shape[0], input_shape[1])] # [atten_weighted_sum, atten_weights]
-
+        return [(input_shape[0], output_len), (input_shape[0], input_shape[1])]  # [atten_weighted_sum, atten_weights]
 
     # def compute_mask(self, input, input_mask=None):
     #     if isinstance(input_mask, list):
@@ -110,7 +109,7 @@ class CustomLoss(object):
 class ToxicityClassifierKeras(ToxicityClassifier):
     # pylint: disable = too-many-arguments
     def __init__(self, session, max_seq, padded, num_tokens, embed_dim, embedding_matrix, recall_weight, metrics):
-        # type: (tf.Session, np.int, bool, np.int, np.int, np.ndarray,np.float32,np.ndarray) -> None
+        # type: (tf.Session, np.int, bool, np.int, np.int, np.ndarray,np.float32,array) -> None
         self._num_tokens = num_tokens
         self._embed_dim = embed_dim
         self._input_layer = None
