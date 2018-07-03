@@ -154,7 +154,7 @@ class ToxicityClassifierKeras(ToxicityClassifier):
 
     def attention_layer(self, tensor):
         atten = AttentionWeightedAverage()
-        result = atten(tensor, mask=K.ones(1000))
+        result = atten(tensor)
         return result[0]
 
     def dense_layer(self, tensor, out_size=144):
