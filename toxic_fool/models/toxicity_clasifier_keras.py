@@ -31,16 +31,21 @@ class AttentionWeightedAverage(Layer):
         assert len(input_shape) == 3
 
         self.atten_weights = self.add_weight(shape=(input_shape[2], 1),
-                                       name='{}_atten_weights'.format(self.name),
-                                       initializer=self.init)
+                                             name='{}_atten_weights'.format(self.name),
+                                             initializer=self.init)
         self.trainable_weights = [self.atten_weights]
         super(AttentionWeightedAverage, self).build(input_shape)
 
-    def call(self, inputs, mask=None):
+    def call(self, inputs, **kwargs):
         # computes a probability distribution over the timesteps
         # uses 'max trick' for numerical stability
         # reshape is done to avoid issue with Tensorflow
         # and 1-dimensional weights
+        mask = None
+        for key, value in kwargs.items():
+            if key == "mask":
+                mask = value
+
         logits = K.dot(inputs, self.atten_weights)
         x_shape = K.shape(inputs)
         logits = K.reshape(logits, (x_shape[0], x_shape[1]))
@@ -53,18 +58,15 @@ class AttentionWeightedAverage(Layer):
         att_weights = ai / (K.sum(ai, axis=1, keepdims=True) + K.epsilon())
         weighted_input = inputs * K.expand_dims(att_weights)
         result = K.sum(weighted_input, axis=1)
-        if self.return_attention:
-            return [result, att_weights]
-        return result
+        return [result, att_weights]
 
     def get_output_shape(self, input_shape):
         return self.compute_output_shape(input_shape)
 
     def compute_output_shape(self, input_shape):
         output_len = input_shape[2]
-        if self.return_attention:
-            return [(input_shape[0], output_len), (input_shape[0], input_shape[1])]
-        return (input_shape[0], output_len)
+        return [(input_shape[0], output_len), (input_shape[0], input_shape[1])] # [atten_weighted_sum, atten_weights]
+
 
     # def compute_mask(self, input, input_mask=None):
     #     if isinstance(input_mask, list):
@@ -99,13 +101,13 @@ class CustomLoss(object):
     @staticmethod
     def binary_crossentropy_with_bias(recall_weight):
         def loss_function(y_true, y_pred):
-            return K.mean(K.binary_crossentropy(y_true, y_pred), axis=-1) + recall_weight * K.sum(y_true * y_pred)
+            return K.mean(K.binary_crossentropy(y_true, y_pred), axis=-1) + recall_weight * K.sum(y_true * (1 - y_pred))
 
         return loss_function
 
 
 class ToxicityClassifierKeras(ToxicityClassifier):
-
+    # pylint: disable = too-many-arguments
     def __init__(self, session, max_seq, padded, num_tokens, embed_dim, embedding_matrix, recall_weight, metrics):
         # type: (tf.Session, np.int, bool) -> None
         self._num_tokens = num_tokens
@@ -152,7 +154,8 @@ class ToxicityClassifierKeras(ToxicityClassifier):
 
     def attention_layer(self, tensor):
         atten = AttentionWeightedAverage()
-        return atten(tensor)
+        result = atten(tensor, mask=K.ones(1000))
+        return result[0]
 
     def dense_layer(self, tensor, out_size=144):
         dense = layers.Dense(out_size, activation='relu')
