@@ -9,7 +9,10 @@ from keras import backend as K
 from keras import layers
 from keras.engine import InputSpec, Layer
 from keras import initializers
+from keras.callbacks import ModelCheckpoint
 from matplotlib import pyplot as plt
+import argparse
+import os
 
 import data
 from models.toxicity_clasifier import ToxicityClassifier
@@ -110,6 +113,24 @@ class ToxicityClassifierKeras(ToxicityClassifier):
     # pylint: disable = too-many-arguments
     def __init__(self, session, max_seq, padded, num_tokens, embed_dim, embedding_matrix, recall_weight, metrics):
         # type: (tf.Session, np.int, bool, np.int, np.int, np.ndarray,np.float32,array) -> None
+        # Parse cmd line arguments
+        parser = argparse.ArgumentParser()
+        parser.add_argument('-restore_checkpoint', action='store_true', default=False, dest='restore_checkpoint',
+                            help='Whether to restore previously saved checkpoint')
+        parser.add_argument('-restore_checkpoint_fullpath', action="store", default="./checkpoints/weights.best.hdf5",
+                            dest="restore_checkpoint_fullpath", help='Full path of the checkpoint file to restore')
+        parser.add_argument('-save_checkpoint', action='store_true', default=False, dest='save_checkpoint',
+                            help='Whether to save checkpoints at the end of each epoch')
+        parser.add_argument('-save_checkpoint_path', action="store", default="./checkpoints/",
+                            dest="save_checkpoint_path", help='Path of the checkpoint directory to save')
+        parser.add_argument('-use_gpu', action='store_true', default=False, dest='use_gpu',
+                            help='Whether to use gpu')
+        args = parser.parse_args()
+        self._restore_checkpoint = args.restore_checkpoint
+        self._restore_checkpoint_fullpath = args.restore_checkpoint_fullpath
+        self._save_checkpoint = args.save_checkpoint
+        self._save_checkpoint_path = args.save_checkpoint_path
+        self._use_gpu = args.use_gpu
         self._num_tokens = num_tokens
         self._embed_dim = embed_dim
         self._input_layer = None
@@ -134,7 +155,10 @@ class ToxicityClassifierKeras(ToxicityClassifier):
         return dropout(tensor)
 
     def bidirectional_rnn(self, tensor, amount=60):
-        bi_rnn = layers.Bidirectional(layers.GRU(amount, return_sequences=True))
+        if self._use_gpu:
+            bi_rnn = layers.Bidirectional(layers.CuDNNGRU(amount, return_sequences=True))
+        else:
+            bi_rnn = layers.Bidirectional(layers.GRU(amount, return_sequences=True))
         return bi_rnn(tensor)
 
     def concat_layer(self, tensors, axis):
@@ -192,6 +216,12 @@ class ToxicityClassifierKeras(ToxicityClassifier):
 
         model = keras.Model(inputs=self._input_layer, outputs=self._output_layer)
         adam_optimizer = keras.optimizers.Adam(lr=1e-3, decay=1e-6, clipvalue=5)
+        if self._restore_checkpoint:
+            if os.path.exists(self._restore_checkpoint_fullpath):
+                model.load_weights(self._restore_checkpoint_fullpath)
+                print ("Restoring weights from " + self._restore_checkpoint_fullpath)
+            else:
+                print ("Saved model was not fount at " + self._restore_checkpoint_fullpath + ", starting from scratch")
         model.compile(loss=CustomLoss.binary_crossentropy_with_bias(self._recall_weight), optimizer=adam_optimizer,
                       metrics=self._metrics)
         model.summary()
@@ -199,8 +229,17 @@ class ToxicityClassifierKeras(ToxicityClassifier):
 
     def train(self, dataset):
         # type: (data.Dataset) -> keras.callbacks.History
+        callback_list = []
+        if self._save_checkpoint:
+            if not os.path.isdir(self._save_checkpoint_path):
+                os.mkdir(self._save_checkpoint_path)
+            filepath = self._save_checkpoint_path + "/weights-epoch-{epoch:02d}-val_loss-{val_loss:.2f}.hdf5"
+            checkpoint = ModelCheckpoint(filepath, monitor='val_loss', verbose=1, save_best_only=False,
+                                         mode='max')
+            callback_list.append(checkpoint)
         history = self._model.fit(x=dataset.train_seq[:, :], y=dataset.train_lbl[:, :], batch_size=500,
-                                  validation_data=(dataset.val_seq[:, :], dataset.val_lbl[:, :]), epochs=5)
+                                  validation_data=(dataset.val_seq[:, :], dataset.val_lbl[:, :]), epochs=30,
+                                  callbacks=callback_list)
         return history
 
     def classify(self, seq):
@@ -250,7 +289,7 @@ def example():
     num_tokens, embed_dim = embedding_matrix.shape
     max_seq = 400
     tox_model = ToxicityClassifierKeras(session=sess, max_seq=max_seq, num_tokens=num_tokens, embed_dim=embed_dim,
-                                        padded=True, embedding_matrix=embedding_matrix, recall_weight=0.01,
+                                        padded=True, embedding_matrix=embedding_matrix, recall_weight=0.001,
                                         metrics=['accuracy', 'ce', CalcAccuracy.precision, CalcAccuracy.recall,
                                                  CalcAccuracy.f1])
 
