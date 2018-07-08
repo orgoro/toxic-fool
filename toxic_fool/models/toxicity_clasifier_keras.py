@@ -249,6 +249,23 @@ def _visualize(history):
     plt.show()
 
 
+def _visualise_attention(seq, attention):
+    first_char = np.nonzero(seq)[0][0]
+    only_seq = seq[first_char:]
+    input_length = len(only_seq)
+    fig = plt.figure(figsize=(input_length/5, 5))
+    ax = fig.add_subplot(1, 1, 1)
+
+    width = 20
+    atten_map = np.tile(np.expand_dims(attention[first_char:], 0), reps=[width, 1])
+    atten_map = np.repeat(atten_map, width, axis=1)
+    ax.imshow(atten_map, cmap='plasma', interpolation='nearest'), plt.title('attention')
+    x = list(np.arange(width/2, width*(input_length+0.5), width))
+    ax.set_xticks(x)
+    ax.set_xticklabels(only_seq, rotation=45, fontdict={'fontsize': 8})
+    plt.show()
+
+
 def example():
     sess = tf.Session()
     embedding_matrix = data.Dataset.init_embedding_from_dump()
@@ -267,7 +284,7 @@ def example():
 
     classes = tox_model.classify(seq)
     atten_w = tox_model.get_attention(seq)
-    plt.figure(), plt.plot(atten_w[0]), plt.title('attention') #, plt.xticks(np.arange(max_seq), seq)
+    _visualise_attention(seq[0], atten_w[0])
     print(classes)
 
     history = tox_model.train(dataset)
@@ -277,7 +294,7 @@ def example():
 
     classes = tox_model.classify(seq)
     atten_w = tox_model.get_attention(seq)
-    plt.figure(), plt.plot(atten_w[0]), plt.title('attention') #, plt.xticks(np.arange(max_seq), seq)
+    _visualise_attention(seq[0], atten_w[0])
     print(classes)
     true_classes = dataset.train_lbl[0, :]
     print(true_classes)
