@@ -121,6 +121,9 @@ class ToxicityClassifierKeras(ToxicityClassifier):
             self._recall_weight = args.recall_weight
         else:
             self._recall_weight = 0.001
+            self._use_gpu = False
+            self._restore_checkpoint = False
+            self._save_checkpoint = False
         self._num_tokens = num_tokens
         self._embed_dim = embed_dim
         self._input_layer = None
