@@ -128,6 +128,7 @@ class ToxicityClassifierKeras(ToxicityClassifier):
         self._embed_dim = embed_dim
         self._input_layer = None
         self._output_layer = None
+        self._atten_w = None
         self._embedding = embedding_matrix
         self._metrics = metrics
         super(ToxicityClassifierKeras, self).__init__(session=session, max_seq=max_seq, padded=padded)
@@ -169,9 +170,9 @@ class ToxicityClassifierKeras(ToxicityClassifier):
         return avgpool(tensor)
 
     def attention_layer(self, tensor):
-        atten = AttentionWeightedAverage()
-        result = atten(tensor)
-        return result[0]
+        attenion = AttentionWeightedAverage()
+        atten, atten_w = attenion(tensor)
+        return atten, atten_w
 
     def dense_layer(self, tensor, out_size=144):
         dense = layers.Dense(out_size, activation='relu')
@@ -198,7 +199,7 @@ class ToxicityClassifierKeras(ToxicityClassifier):
         avgpool = self.avg_polling_layer(concat)
         maxpool = self.max_polling_layer(concat)
         last_stage = self.last_stage(concat)
-        atten = self.attention_layer(concat)
+        atten, self._atten_w = self.attention_layer(concat)
         all_views = self.concat_layer([last_stage, maxpool, avgpool, atten], axis=1)
 
         # classify:
@@ -254,7 +255,11 @@ class ToxicityClassifierKeras(ToxicityClassifier):
         grads = [grad_0, grad_1, grad_2, grad_3, grad_4, grad_5]
         fn = K.function(inputs=[self._model.input], outputs=grads)
 
-        return fn([seq])
+        return fn([seq])[0]
+
+    def get_attention(self, seq):
+        fn = K.function(inputs=[self._model.input], outputs=[self._atten_w])
+        return fn([seq])[0]
 
 
 def _visualize(history):
@@ -275,7 +280,25 @@ def _visualize(history):
     plt.show()
 
 
+def _visualise_attention(seq, attention):
+    first_char = np.nonzero(seq)[0][0]
+    only_seq = seq[first_char:]
+    input_length = len(only_seq)
+    fig = plt.figure(figsize=(input_length/5, 5))
+    ax = fig.add_subplot(1, 1, 1)
+
+    width = 20
+    atten_map = np.tile(np.expand_dims(attention[first_char:], 0), reps=[width, 1])
+    atten_map = np.repeat(atten_map, width, axis=1)
+    ax.imshow(atten_map, cmap='plasma', interpolation='nearest'), plt.title('attention')
+    x = list(np.arange(width/2, width*(input_length+0.5), width))
+    ax.set_xticks(x)
+    ax.set_xticklabels(only_seq, rotation=45, fontdict={'fontsize': 8})
+    plt.show()
+
+
 def example(args):
+
     sess = tf.Session()
     embedding_matrix = data.Dataset.init_embedding_from_dump()
     num_tokens, embed_dim = embedding_matrix.shape
@@ -287,19 +310,23 @@ def example(args):
 
     dataset = data.Dataset.init_from_dump()
     seq = np.expand_dims(dataset.train_seq[0, :], 0)
-    grad_tox = tox_model.get_gradient(seq)[0]
+    grad_tox = tox_model.get_gradient(seq)
     grad_norm = np.linalg.norm(grad_tox, axis=2)
     print('max grad location {}/{}'.format(np.argmax(grad_norm, axis=1), max_seq))
 
     classes = tox_model.classify(seq)
+    atten_w = tox_model.get_attention(seq)
+    _visualise_attention(seq[0], atten_w[0])
     print(classes)
 
     history = tox_model.train(dataset)
-    grad_tox = tox_model.get_gradient(seq)[0]
+    grad_tox = tox_model.get_gradient(seq)
     grad_norm = np.linalg.norm(grad_tox, axis=2)
     print('max grad location {}/{}'.format(np.argmax(grad_norm, axis=1), max_seq))
 
     classes = tox_model.classify(seq)
+    atten_w = tox_model.get_attention(seq)
+    _visualise_attention(seq[0], atten_w[0])
     print(classes)
     true_classes = dataset.train_lbl[0, :]
     print(true_classes)
