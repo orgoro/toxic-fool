@@ -110,5 +110,6 @@ venv.bak/
 
 # outputs
 
+toxic_fool/resource/data
 toxic_fool/resource_out/
 !toxic_fool/resource_out/__init__.py
