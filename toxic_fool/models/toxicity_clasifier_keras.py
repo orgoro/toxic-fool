@@ -11,7 +11,6 @@ from keras.engine import InputSpec, Layer
 from keras import initializers
 from keras.callbacks import ModelCheckpoint
 from matplotlib import pyplot as plt
-import argparse
 import os
 
 import data
@@ -111,32 +110,22 @@ class CustomLoss(object):
 
 class ToxicityClassifierKeras(ToxicityClassifier):
     # pylint: disable = too-many-arguments
-    def __init__(self, session, max_seq, padded, num_tokens, embed_dim, embedding_matrix, recall_weight, metrics):
-        # type: (tf.Session, np.int, bool, np.int, np.int, np.ndarray,np.float32,array) -> None
-        # Parse cmd line arguments
-        parser = argparse.ArgumentParser()
-        parser.add_argument('-restore_checkpoint', action='store_true', default=False, dest='restore_checkpoint',
-                            help='Whether to restore previously saved checkpoint')
-        parser.add_argument('-restore_checkpoint_fullpath', action="store", default="./checkpoints/weights.best.hdf5",
-                            dest="restore_checkpoint_fullpath", help='Full path of the checkpoint file to restore')
-        parser.add_argument('-save_checkpoint', action='store_true', default=False, dest='save_checkpoint',
-                            help='Whether to save checkpoints at the end of each epoch')
-        parser.add_argument('-save_checkpoint_path', action="store", default="./checkpoints/",
-                            dest="save_checkpoint_path", help='Path of the checkpoint directory to save')
-        parser.add_argument('-use_gpu', action='store_true', default=False, dest='use_gpu',
-                            help='Whether to use gpu')
-        args = parser.parse_args()
-        self._restore_checkpoint = args.restore_checkpoint
-        self._restore_checkpoint_fullpath = args.restore_checkpoint_fullpath
-        self._save_checkpoint = args.save_checkpoint
-        self._save_checkpoint_path = args.save_checkpoint_path
-        self._use_gpu = args.use_gpu
+    def __init__(self, session, max_seq, padded, num_tokens, embed_dim, embedding_matrix, metrics, args):
+        # type: (tf.Session, np.int, bool, np.int, np.int, np.ndarray,list,np.typeDict) -> None
+        if args is not None:
+            self._restore_checkpoint = args.restore_checkpoint
+            self._restore_checkpoint_fullpath = args.restore_checkpoint_fullpath
+            self._save_checkpoint = args.save_checkpoint
+            self._save_checkpoint_path = args.save_checkpoint_path
+            self._use_gpu = args.use_gpu
+            self._recall_weight = args.recall_weight
+        else:
+            self._recall_weight = 0.001
         self._num_tokens = num_tokens
         self._embed_dim = embed_dim
         self._input_layer = None
         self._output_layer = None
         self._embedding = embedding_matrix
-        self._recall_weight = recall_weight
         self._metrics = metrics
         super(ToxicityClassifierKeras, self).__init__(session=session, max_seq=max_seq, padded=padded)
 
@@ -219,9 +208,9 @@ class ToxicityClassifierKeras(ToxicityClassifier):
         if self._restore_checkpoint:
             if os.path.exists(self._restore_checkpoint_fullpath):
                 model.load_weights(self._restore_checkpoint_fullpath)
-                print ("Restoring weights from " + self._restore_checkpoint_fullpath)
+                print("Restoring weights from " + self._restore_checkpoint_fullpath)
             else:
-                print ("Saved model was not fount at " + self._restore_checkpoint_fullpath + ", starting from scratch")
+                print("Saved model was not fount at " + self._restore_checkpoint_fullpath + ", starting from scratch")
         model.compile(loss=CustomLoss.binary_crossentropy_with_bias(self._recall_weight), optimizer=adam_optimizer,
                       metrics=self._metrics)
         model.summary()
@@ -283,15 +272,15 @@ def _visualize(history):
     plt.show()
 
 
-def example():
+def example(args):
     sess = tf.Session()
     embedding_matrix = data.Dataset.init_embedding_from_dump()
     num_tokens, embed_dim = embedding_matrix.shape
     max_seq = 400
     tox_model = ToxicityClassifierKeras(session=sess, max_seq=max_seq, num_tokens=num_tokens, embed_dim=embed_dim,
-                                        padded=True, embedding_matrix=embedding_matrix, recall_weight=0.001,
+                                        padded=True, embedding_matrix=embedding_matrix,
                                         metrics=['accuracy', 'ce', CalcAccuracy.precision, CalcAccuracy.recall,
-                                                 CalcAccuracy.f1])
+                                                 CalcAccuracy.f1], args=args)
 
     dataset = data.Dataset.init_from_dump()
     seq = np.expand_dims(dataset.train_seq[0, :], 0)
@@ -316,4 +305,4 @@ def example():
 
 
 if __name__ == '__main__':
-    example()
+    example(args=None)
