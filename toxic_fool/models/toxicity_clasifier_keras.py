@@ -214,7 +214,7 @@ class ToxicityClassifierKeras(ToxicityClassifier):
                 model.load_weights(self._restore_checkpoint_fullpath)
                 print("Restoring weights from " + self._restore_checkpoint_fullpath)
             else:
-                print("Saved model was not fount at " + self._restore_checkpoint_fullpath + ", starting from scratch")
+                print("Saved model was not found at " + self._restore_checkpoint_fullpath + ", starting from scratch")
         model.compile(loss=CustomLoss.binary_crossentropy_with_bias(self._recall_weight), optimizer=adam_optimizer,
                       metrics=self._metrics)
         model.summary()
