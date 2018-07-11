@@ -271,7 +271,7 @@ class ToxicityClassifierKeras(ToxicityClassifier):
             curr_token = seq[i]
 
             # `0` is a  reserved   index   that won't be assigned to any word.
-            if (curr_token == 0): continue
+            if curr_token == 0: continue
 
             curr_char = token_index[curr_token]
             sentance += curr_char
@@ -324,7 +324,7 @@ def _visualise_attention(seq, attention):
 def example(args):
 
     sess = tf.Session()
-    embedding_matrix , char_index = data.Dataset.init_embedding_from_dump()
+    embedding_matrix , _ = data.Dataset.init_embedding_from_dump()
     num_tokens, embed_dim = embedding_matrix.shape
     max_seq = 400
     tox_model = ToxicityClassifierKeras(session=sess, max_seq=max_seq, num_tokens=num_tokens, embed_dim=embed_dim,
