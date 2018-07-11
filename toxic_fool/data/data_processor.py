@@ -98,7 +98,7 @@ class DataProcessor(object):
             values = line.split()
             curr_char = values[0]
             ##whire space = ' ' - we can't use it in the file, because i use line.split(). so we used 'white_space'
-            if (curr_char == 'white_space'):
+            if curr_char == 'white_space':
                 curr_char = ' '
 
             char_list.append(curr_char)
