@@ -90,7 +90,7 @@ class CustomLoss(object):
         return loss_function
 
 
-class ToxClassifierKerasConfig():
+class ToxClassifierKerasConfig(object):
     def __init__(self,
                  restore=True,
                  restore_path=LATEST_KERAS_WEIGHTS,
