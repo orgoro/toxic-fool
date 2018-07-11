@@ -241,17 +241,41 @@ class ToxicityClassifierKeras(ToxicityClassifier):
         raise NotImplementedError('implemented by child')
 
     def get_gradient(self, seq):
+        #TODO i wanted the function to run faster, and use only toxic for now
         grad_0 = K.gradients(loss=self._model.output[:, 0], variables=self._embedding)[0]
-        grad_1 = K.gradients(loss=self._model.output[:, 1], variables=self._embedding)[0]
-        grad_2 = K.gradients(loss=self._model.output[:, 2], variables=self._embedding)[0]
-        grad_3 = K.gradients(loss=self._model.output[:, 3], variables=self._embedding)[0]
-        grad_4 = K.gradients(loss=self._model.output[:, 4], variables=self._embedding)[0]
-        grad_5 = K.gradients(loss=self._model.output[:, 5], variables=self._embedding)[0]
+        # grad_1 = K.gradients(loss=self._model.output[:, 1], variables=self._embedding)[0]
+        # grad_2 = K.gradients(loss=self._model.output[:, 2], variables=self._embedding)[0]
+        # grad_3 = K.gradients(loss=self._model.output[:, 3], variables=self._embedding)[0]
+        # grad_4 = K.gradients(loss=self._model.output[:, 4], variables=self._embedding)[0]
+        # grad_5 = K.gradients(loss=self._model.output[:, 5], variables=self._embedding)[0]
 
-        grads = [grad_0, grad_1, grad_2, grad_3, grad_4, grad_5]
+        #grads = [grad_0, grad_1, grad_2, grad_3, grad_4, grad_5]
+        grads = [grad_0]
         fn = K.function(inputs=[self._model.input], outputs=grads)
 
         return fn([seq])[0]
+
+    def convert_seq_to_sentence(self, seq, char_index):
+        # convert the char to token dic into token to char dic
+        token_index = {}
+        for key, value in char_index.items():
+            token_index[value] = key
+
+        # convert the seq to sentence
+        sentance = ''
+        for i in range(len(seq)):
+            curr_token = seq[i]
+
+            # `0` is a  reserved   index   that won't be assigned to any word.
+            if curr_token == 0: continue
+
+            curr_char = token_index[curr_token]
+            sentance += curr_char
+
+        return sentance
+
+    def print_seq(self, seq, char_index):
+        print(self.convert_seq_to_sentence(seq, char_index))
 
     def get_attention(self, seq):
         fn = K.function(inputs=[self._model.input], outputs=[self._atten_w])
