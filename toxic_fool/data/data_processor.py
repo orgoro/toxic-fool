@@ -21,6 +21,7 @@ LBL_VAL_DUMP = 'lbl_val.npy'
 LBL_TEST_DUMP = 'lbl_test.npy'
 
 CHAR_EMBEDDING_TEST_DUMP = 'char_embedding.npy'
+CHAR_INDEX_TEST_DUMP = 'char_index_embedding.npy'
 
 
 class Dataset(object):
@@ -38,7 +39,8 @@ class Dataset(object):
 
     @classmethod
     def init_embedding_from_dump(cls):
-        return np.load(path.join(out.RES_OUT_DIR, CHAR_EMBEDDING_TEST_DUMP))
+        return np.load(path.join(out.RES_OUT_DIR, CHAR_EMBEDDING_TEST_DUMP)) , \
+               np.load(path.join(out.RES_OUT_DIR, CHAR_INDEX_TEST_DUMP)).item()
 
     @classmethod
     def init_from_dump(cls, folder=out.RES_OUT_DIR):
@@ -76,11 +78,13 @@ class DataProcessor(object):
         self.labels_val = None  # type: np.ndarray
         self.labels_test = None  # type: np.ndarray
         self._embedding_matrix = None  # type: np.ndarray
+        self._char_index = None
 
     @staticmethod
     def _clean_text(text_seqs):
         formatted = str(unicodedata.normalize('NFKD', text_seqs).encode('ascii', 'ignore'))
-        exp = re.compile(r'[^(a-z\d\!\@\#\$\%\^\&\*\=\?)*]', re.IGNORECASE)
+        # TODO seems like it delete some chars. need to go over all embedding file, and add all chars to here.
+        exp = re.compile(r'[^(a-z\d\!\@\#\$\%\^\&\ \*\=\?)*]', re.IGNORECASE)
         clean = exp.sub('', formatted)
         return clean
 
@@ -93,6 +97,10 @@ class DataProcessor(object):
         for line in f:
             values = line.split()
             curr_char = values[0]
+            ##whire space = ' ' - we can't use it in the file, because i use line.split(). so we used 'white_space'
+            if curr_char == 'white_space':
+                curr_char = ' '
+
             char_list.append(curr_char)
             value = np.asarray(values[1:], dtype='float32')
             embeddings_index[curr_char] = value
@@ -100,12 +108,23 @@ class DataProcessor(object):
 
         return char_list, embeddings_index
 
+    # this function was used to create white space embedding once. not needed anymore
+    def gen_embedding_for_whitespace(self, embedding_matrix ):
+        white_space_embedding = np.random.normal(0,1,[1,300]) # np.random.rand(1, 300)
+        matrix_embedding_norm = np.mean( np.linalg.norm(embedding_matrix, axis=1, keepdims=True) )
+        white_space_embedding_norm = np.linalg.norm(white_space_embedding, axis=1, keepdims=True)
+        white_space_embedding =  white_space_embedding / white_space_embedding_norm * matrix_embedding_norm
+
+        return white_space_embedding
+
     def create_embedding_matrix(self, embeddings_index):
         char_index = self._tokenizer.word_index  # it's actually char and not word. TODO consider fix
         embedding_matrix = np.zeros((len(char_index) + 1, res.EMBEDDING_DIM))
         for char, i in char_index.items():
             embedding_vector = embeddings_index.get(char)
             embedding_matrix[i] = embedding_vector[:res.EMBEDDING_DIM]
+
+        #self.gen_embedding_for_whitespace(embedding_matrix)
 
         return embedding_matrix
 
@@ -128,10 +147,11 @@ class DataProcessor(object):
             text_test = np.asarray([self._clean_text(t) for t in text_test])
 
         print('fitting tokenizer...')
-        char_list, embeddings_index = self.get_char_list_and_embedding_index()
+        char_list, embedding_index = self.get_char_list_and_embedding_index()
         self._tokenizer.fit_on_texts(texts=char_list)
-        self.check_all_data_char_in_embedding(text_train, text_test, embeddings_index)
-        self._embedding_matrix = self.create_embedding_matrix(embeddings_index)
+        self._embedding_matrix = self.create_embedding_matrix(embedding_index)
+        self.check_all_data_char_in_embedding(text_train, text_test, embedding_index)
+        self._char_index = self._tokenizer.word_index
 
         # self._tokenizer.fit_on_texts(texts=list(text_test) + list(text_train))
         print('done fitting! unique tokens found: {}'.format(len(self._tokenizer.word_index.keys())))
@@ -175,6 +195,7 @@ class DataProcessor(object):
         np.save(path.join(out.RES_OUT_DIR, LBL_VAL_DUMP), self.labels_val)
         # np.save(path.join(out.RES_OUT_DIR, LBL_TEST_DUMP), self.labels_test)
         np.save(path.join(out.RES_OUT_DIR, CHAR_EMBEDDING_TEST_DUMP), self._embedding_matrix)
+        np.save(path.join(out.RES_OUT_DIR, CHAR_INDEX_TEST_DUMP), self._char_index)
 
     def get_dataset(self):
         # type: () -> Dataset
