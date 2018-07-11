@@ -201,6 +201,7 @@ class ToxicityClassifierKeras(ToxicityClassifier):
         if self._config.restore:
             saved = self._config.restore_path
             assert path.exists(saved), 'Saved model was not found'
+            assert self._config.use_gpu, "Can't load weights saved with gpu when running with cpu. Run with -restore=False"
             model.load_weights(saved)
             print("Restoring weights from " + saved)
 
@@ -212,7 +213,7 @@ class ToxicityClassifierKeras(ToxicityClassifier):
         return model
 
     def _define_callbacks(self):
-        callback_list = list
+        callback_list = list()
         if self._config.checkpoint:
             save_path = self._config.checkpoint_path
             if not os.path.isdir(save_path):
@@ -241,7 +242,7 @@ class ToxicityClassifierKeras(ToxicityClassifier):
         raise NotImplementedError('implemented by child')
 
     def get_gradient(self, seq):
-        #TODO i wanted the function to run faster, and use only toxic for now
+        # TODO i wanted the function to run faster, and use only toxic for now
         grad_0 = K.gradients(loss=self._model.output[:, 0], variables=self._embedding)[0]
         # grad_1 = K.gradients(loss=self._model.output[:, 1], variables=self._embedding)[0]
         # grad_2 = K.gradients(loss=self._model.output[:, 2], variables=self._embedding)[0]
@@ -249,7 +250,7 @@ class ToxicityClassifierKeras(ToxicityClassifier):
         # grad_4 = K.gradients(loss=self._model.output[:, 4], variables=self._embedding)[0]
         # grad_5 = K.gradients(loss=self._model.output[:, 5], variables=self._embedding)[0]
 
-        #grads = [grad_0, grad_1, grad_2, grad_3, grad_4, grad_5]
+        # grads = [grad_0, grad_1, grad_2, grad_3, grad_4, grad_5]
         grads = [grad_0]
         fn = K.function(inputs=[self._model.input], outputs=grads)
 
@@ -321,7 +322,9 @@ def example():
     sess = tf.Session()
     embedding_matrix = data.Dataset.init_embedding_from_dump()
     max_seq = 400
-    tox_model = ToxicityClassifierKeras(session=sess, max_seq=max_seq, embedding_matrix=embedding_matrix)
+    config = ToxClassifierKerasConfig(restore=False)
+    tox_model = ToxicityClassifierKeras(session=sess, max_seq=max_seq, embedding_matrix=embedding_matrix[0],
+                                        config=config)
 
     dataset = data.Dataset.init_from_dump()
     seq = np.expand_dims(dataset.train_seq[0, :], 0)

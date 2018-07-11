@@ -17,7 +17,7 @@ def train(config):
     sess = tf.Session()
     embedding_matrix = data.Dataset.init_embedding_from_dump()
     max_seq = 400
-    tox_model = ToxicityClassifierKeras(session=sess, embedding_matrix=embedding_matrix, max_seq=max_seq, config=config)
+    tox_model = ToxicityClassifierKeras(session=sess, embedding_matrix=embedding_matrix[0], max_seq=max_seq, config=config)
     dataset = data.Dataset.init_from_dump()
     tox_model.train(dataset)
     seq = np.expand_dims(dataset.train_seq[0, :], 0)
@@ -33,7 +33,7 @@ def main():
                         help='Whether to restore previously saved checkpoint')
     parser.add_argument('-restore_path', action="store", default= LATEST_KERAS_WEIGHTS,
                         dest="restore_path", help='Full path of the checkpoint file to restore')
-    parser.add_argument('-checkpoint', action='store_true', default=False, dest='save_checkpoint',
+    parser.add_argument('-checkpoint', action='store_true', default=False, dest='checkpoint',
                         help='Whether to save checkpoints at the end of each epoch')
     parser.add_argument('-checkpoint_path', action="store", default=RES_OUT_DIR,
                         dest="checkpoint_path", help='Path of the checkpoint directory to save')
