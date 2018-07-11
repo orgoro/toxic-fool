@@ -7,12 +7,11 @@ import data
 import numpy as np
 from models.toxicity_classifier_keras_restore import restore
 
-if __name__ == '__main__':
+def main():
 
     tox_model = restore()
-
     ##########################################
-
+    embedding_matrix, char_to_token_dic = data.Dataset.init_embedding_from_dump()
     # get data
     dataset = data.Dataset.init_from_dump()
 
@@ -23,7 +22,7 @@ if __name__ == '__main__':
     # squeeze the seq to vector
     squeeze_seq = seq.squeeze(0)
 
-    # print setence before the flip
+    # print sentence before the flip
     tox_model.print_seq(squeeze_seq, char_to_token_dic)
 
     # copy the sentence to the output sentence
@@ -33,7 +32,7 @@ if __name__ == '__main__':
 
     # loop on the amount of char to flip
     # TODO - if i replace a char twice, count it once
-    for k in range(num_of_char_to_flip):
+    for _ in range(num_of_char_to_flip):
         grad_best_flip = -np.inf
 
         # get grad
@@ -85,3 +84,6 @@ if __name__ == '__main__':
 
     # TODO decide which class to attack
     # TODO use beam search
+
+if __name__ == '__main__':
+    main()

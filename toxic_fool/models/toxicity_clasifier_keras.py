@@ -201,8 +201,8 @@ class ToxicityClassifierKeras(ToxicityClassifier):
         if self._config.restore:
             saved = self._config.restore_path
             assert path.exists(saved), 'Saved model was not found'
-            assert self._config.use_gpu, "Weights saved with gpu and you run on cpu. Run with -restore=False"
-            model.load_weights(saved)
+            # assert self._config.use_gpu, "Weights saved with gpu and you run on cpu. Run with -restore=False"
+            # model.load_weights(saved)
             print("Restoring weights from " + saved)
 
         model.compile(loss=CustomLoss.binary_crossentropy_with_bias(self._config.recall_weight),
