@@ -11,11 +11,10 @@ from data import data_processor as process
 
 class ToxicityClassifier(object):
 
-    def __init__(self, session, max_seq, padded):
+    def __init__(self, session, max_seq):
         # type: (tf.Session, np.int, bool) -> None
         self._session = session
         self._max_seq = max_seq
-        self._padded = padded
 
         self._model = self._build_graph()  # type: keras.Model
 
