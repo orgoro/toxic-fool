@@ -49,7 +49,7 @@ def main():
                                       restore_path=args.restore_path,
                                       checkpoint=args.checkpoint,
                                       checkpoint_path=args.checkpoint_path,
-                                      use_gpu=args.use_gpu,
+                                      # use_gpu=args.use_gpu,
                                       recall_weight=args.recall_weight)
 
     train(config=config)
