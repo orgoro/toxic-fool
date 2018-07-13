@@ -119,10 +119,11 @@ class DataProcessor(object):
 
     def create_embedding_matrix(self, embeddings_index):
         char_index = self._tokenizer.word_index  # it's actually char and not word. TODO consider fix
-        embedding_matrix = np.zeros((len(char_index) + 1, res.EMBEDDING_DIM))
+        #embedding_matrix = np.zeros((len(char_index) + 1, res.EMBEDDING_DIM))
+        embedding_matrix = np.zeros((len(char_index), res.EMBEDDING_DIM))
         for char, i in char_index.items():
             embedding_vector = embeddings_index.get(char)
-            embedding_matrix[i] = embedding_vector[:res.EMBEDDING_DIM]
+            embedding_matrix[i-1] = embedding_vector[:res.EMBEDDING_DIM]
 
         #self.gen_embedding_for_whitespace(embedding_matrix)
 

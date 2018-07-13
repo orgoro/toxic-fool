@@ -218,7 +218,7 @@ class ToxicityClassifierKeras(ToxicityClassifier):
             save_path = self._config.checkpoint_path
             if not os.path.isdir(save_path):
                 os.mkdir(save_path)
-            file_path = path.join(save_path, "/weights-epoch-{epoch:02d}-val_f1-{val_calc_f1:.2f}.hdf5")
+            file_path = path.join(save_path, "weights-epoch-{epoch:02d}-val_f1-{val_calc_f1:.2f}.hdf5")
             checkpoint = ModelCheckpoint(file_path, monitor='val_calc_f1', verbose=1, save_best_only=False,
                                          mode='max')
             callback_list.append(checkpoint)
@@ -227,8 +227,8 @@ class ToxicityClassifierKeras(ToxicityClassifier):
     def train(self, dataset):
         # type: (data.Dataset) -> keras.callbacks.History
         callback_list = self._define_callbacks()
-        history = self._model.fit(x=dataset.train_seq[:1000, :], y=dataset.train_lbl[:1000, :], batch_size=500,
-                                  validation_data=(dataset.val_seq[:, :], dataset.val_lbl[:, :]), epochs=1,
+        history = self._model.fit(x=dataset.train_seq[:, :], y=dataset.train_lbl[:, :], batch_size=500,
+                                  validation_data=(dataset.val_seq[:, :], dataset.val_lbl[:, :]), epochs=50,
                                   callbacks=callback_list)
         return history
 
