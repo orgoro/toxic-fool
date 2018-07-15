@@ -138,7 +138,8 @@ class ToxicityClassifierKeras(ToxicityClassifier):
         if self._config.use_gpu:
             bi_rnn = layers.Bidirectional(layers.CuDNNGRU(amount, return_sequences=True))
         else:
-            bi_rnn = layers.Bidirectional(layers.GRU(amount, return_sequences=True, reset_after=True, recurrent_activation='sigmoid'))
+            bi_rnn = layers.Bidirectional(
+                layers.GRU(amount, return_sequences=True, reset_after=True, recurrent_activation='sigmoid'))
         return bi_rnn(tensor)
 
     def concat_layer(self, tensors, axis):
