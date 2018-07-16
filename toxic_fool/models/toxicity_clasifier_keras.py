@@ -138,7 +138,8 @@ class ToxicityClassifierKeras(ToxicityClassifier):
         if self._config.use_gpu:
             bi_rnn = layers.Bidirectional(layers.CuDNNGRU(amount, return_sequences=True))
         else:
-            bi_rnn = layers.Bidirectional(layers.GRU(amount, return_sequences=True))
+            bi_rnn = layers.Bidirectional(
+                layers.GRU(amount, return_sequences=True, reset_after=True, recurrent_activation='sigmoid'))
         return bi_rnn(tensor)
 
     def concat_layer(self, tensors, axis):
@@ -201,7 +202,6 @@ class ToxicityClassifierKeras(ToxicityClassifier):
         if self._config.restore:
             saved = self._config.restore_path
             assert path.exists(saved), 'Saved model was not found'
-            assert self._config.use_gpu, "Weights saved with gpu and you run on cpu. Run with -restore=False"
             model.load_weights(saved)
             print("Restoring weights from " + saved)
 
@@ -228,7 +228,7 @@ class ToxicityClassifierKeras(ToxicityClassifier):
         # type: (data.Dataset) -> keras.callbacks.History
         callback_list = self._define_callbacks()
         history = self._model.fit(x=dataset.train_seq[:, :], y=dataset.train_lbl[:, :], batch_size=500,
-                                  validation_data=(dataset.val_seq[:, :], dataset.val_lbl[:, :]), epochs=50,
+                                  validation_data=(dataset.val_seq[:, :], dataset.val_lbl[:, :]), epochs=1,
                                   callbacks=callback_list)
         return history
 
