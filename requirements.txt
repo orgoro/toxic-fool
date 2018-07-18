@@ -8,3 +8,4 @@ pandas
 keras
 numpy
 matplotlib
+sklearn

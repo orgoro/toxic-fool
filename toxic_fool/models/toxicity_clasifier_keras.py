@@ -12,6 +12,8 @@ from keras import initializers
 from keras.callbacks import ModelCheckpoint
 from matplotlib import pyplot as plt
 import os
+from sklearn.metrics import roc_auc_score
+from keras.callbacks import Callback
 
 import data
 from models.toxicity_clasifier import ToxicityClassifier
@@ -70,12 +72,6 @@ class AttentionWeightedAverage(Layer):
         output_len = input_shape[2]
         return [(input_shape[0], output_len), (input_shape[0], input_shape[1])]  # [atten_weighted_sum, atten_weights]
 
-    # def compute_mask(self, input, input_mask=None):
-    #     if isinstance(input_mask, list):
-    #         return [None] * len(input_mask)
-    #     else:
-    #         return None
-
 
 class CalcAccuracy(object):
     @staticmethod
@@ -97,6 +93,39 @@ class CalcAccuracy(object):
         precision = CalcAccuracy.precision(y_true, y_pred)
         recall = CalcAccuracy.recall(y_true, y_pred)
         return 2 * ((precision * recall) / (precision + recall + K.epsilon()))
+
+
+class RocCallback(Callback):
+    def __init__(self, dataset):
+        # type: (data.Dataset) -> None
+        self.x = dataset.train_seq
+        self.y = dataset.train_lbl
+        self.x_val = dataset.val_seq
+        self.y_val = dataset.val_lbl
+        super(RocCallback, self).__init__()
+
+    def on_train_begin(self, logs={}):
+        return
+
+    def on_train_end(self, logs={}):
+        return
+
+    def on_epoch_begin(self, epoch, logs={}):
+        return
+
+    def on_epoch_end(self, epoch, logs={}):
+        y_pred = self.model.predict(self.x[:1000])
+        roc = roc_auc_score(self.y[:1000], y_pred[:1000], average='weighted')
+        y_pred_val = self.model.predict(self.x_val[:1000])
+        roc_val = roc_auc_score(self.y_val[:1000], y_pred_val[:1000], average='weighted')
+        print('\rroc-auc: %s - roc-auc_val: %s' % (str(round(roc, 4)), str(round(roc_val, 4))), end=100 * ' ' + '\n')
+        return
+
+    def on_batch_begin(self, batch, logs={}):
+        return
+
+    def on_batch_end(self, batch, logs={}):
+        return
 
 
 class CustomLoss(object):
@@ -230,7 +259,8 @@ class ToxicityClassifierKeras(ToxicityClassifier):
             checkpoint = ModelCheckpoint(filepath, monitor='val_loss', verbose=1, save_best_only=False,
                                          mode='max')
             callback_list.append(checkpoint)
-        history = self._model.fit(x=dataset.train_seq[:, :], y=dataset.train_lbl[:, :], batch_size=500,
+        callback_list.append(RocCallback(dataset))
+        history = self._model.fit(x=dataset.train_seq[:1000, :], y=dataset.train_lbl[:1000, :], batch_size=500,
                                   validation_data=(dataset.val_seq[:, :], dataset.val_lbl[:, :]), epochs=30,
                                   callbacks=callback_list)
         return history
@@ -284,25 +314,25 @@ def _visualise_attention(seq, attention):
     first_char = np.nonzero(seq)[0][0]
     only_seq = seq[first_char:]
     input_length = len(only_seq)
-    fig = plt.figure(figsize=(input_length/5, 5))
+    fig = plt.figure(figsize=(input_length / 5, 5))
     ax = fig.add_subplot(1, 1, 1)
 
     width = 20
     atten_map = np.tile(np.expand_dims(attention[first_char:], 0), reps=[width, 1])
     atten_map = np.repeat(atten_map, width, axis=1)
     ax.imshow(atten_map, cmap='plasma', interpolation='nearest'), plt.title('attention')
-    x = list(np.arange(width/2, width*(input_length+0.5), width))
+    x = list(np.arange(width / 2, width * (input_length + 0.5), width))
     ax.set_xticks(x)
     ax.set_xticklabels(only_seq, rotation=45, fontdict={'fontsize': 8})
     plt.show()
 
 
 def example(args):
-
     sess = tf.Session()
     embedding_matrix = data.Dataset.init_embedding_from_dump()
     num_tokens, embed_dim = embedding_matrix.shape
     max_seq = 400
+
     tox_model = ToxicityClassifierKeras(session=sess, max_seq=max_seq, num_tokens=num_tokens, embed_dim=embed_dim,
                                         padded=True, embedding_matrix=embedding_matrix,
                                         metrics=['accuracy', 'ce', CalcAccuracy.precision, CalcAccuracy.recall,
