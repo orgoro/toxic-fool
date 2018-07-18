@@ -83,10 +83,9 @@ class AttentionWeightedAverage(Layer):
 
 class CustomLoss(object):
     @staticmethod
-    def binary_crossentropy_with_bias(recall_weight):
+    def binary_crossentropy_with_bias(recall_weight, train_labels_bias):
         def loss_function(y_true, y_pred):
-            return K.mean(K.binary_crossentropy(y_true, y_pred), axis=-1) + recall_weight * K.sum(y_true * (1 - y_pred))
-
+            return K.mean(K.binary_crossentropy(y_true, y_pred), axis=-1) + recall_weight * K.sum(np.array(train_labels_bias) * (y_true * (1 - y_pred)))
         return loss_function
 
 
@@ -97,13 +96,17 @@ class ToxClassifierKerasConfig(object):
                  checkpoint=False,
                  checkpoint_path=RES_OUT_DIR,
                  use_gpu=tf.test.is_gpu_available(),
-                 recall_weight=0.001):
+                 train_labels_bias=[0.16, 0.16, 0.17, 0.17, 0.17, 0.17],
+                 recall_weight = 0.01,
+                 run_name = ''):
         self.restore = restore
         self.restore_path = restore_path
         self.checkpoint = checkpoint
         self.checkpoint_path = checkpoint_path
         self.use_gpu = use_gpu
+        self.train_lables_bias = train_labels_bias
         self.recall_weight = recall_weight
+        self.run_name = run_name
 
 
 class ToxicityClassifierKeras(ToxicityClassifier):
@@ -205,7 +208,7 @@ class ToxicityClassifierKeras(ToxicityClassifier):
             model.load_weights(saved)
             print("Restoring weights from " + saved)
 
-        model.compile(loss=CustomLoss.binary_crossentropy_with_bias(self._config.recall_weight),
+        model.compile(loss=CustomLoss.binary_crossentropy_with_bias(self._config.recall_weight, self._config.train_lables_bias),
                       optimizer=adam_optimizer,
                       metrics=self._metrics)
 
@@ -218,8 +221,9 @@ class ToxicityClassifierKeras(ToxicityClassifier):
             save_path = self._config.checkpoint_path
             if not os.path.isdir(save_path):
                 os.mkdir(save_path)
-            file_path = path.join(save_path, "weights-epoch-{epoch:02d}-val_f1-{val_calc_f1:.2f}.hdf5")
-            checkpoint = ModelCheckpoint(file_path, monitor='val_calc_f1', verbose=1, save_best_only=False,
+            file_name = self._config.run_name + "_weights-epoch-{epoch:02d}-val_f1-{val_calc_f1:.2f}.hdf5"
+            file_path = path.join(save_path, file_name)
+            checkpoint = ModelCheckpoint(file_path, monitor='val_calc_f1', verbose=1, save_best_only=True,
                                          mode='max')
             callback_list.append(checkpoint)
         return callback_list
@@ -228,7 +232,7 @@ class ToxicityClassifierKeras(ToxicityClassifier):
         # type: (data.Dataset) -> keras.callbacks.History
         callback_list = self._define_callbacks()
         history = self._model.fit(x=dataset.train_seq[:, :], y=dataset.train_lbl[:, :], batch_size=500,
-                                  validation_data=(dataset.val_seq[:, :], dataset.val_lbl[:, :]), epochs=1,
+                                  validation_data=(dataset.val_seq[:, :], dataset.val_lbl[:, :]), epochs=100,
                                   callbacks=callback_list)
         return history
 
