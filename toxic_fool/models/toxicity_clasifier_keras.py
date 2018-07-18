@@ -104,16 +104,16 @@ class RocCallback(Callback):
         self.y_val = dataset.val_lbl
         super(RocCallback, self).__init__()
 
-    def on_train_begin(self, logs={}):
+    def on_train_begin(self, logs=None):
         return
 
-    def on_train_end(self, logs={}):
+    def on_train_end(self, logs=None):
         return
 
-    def on_epoch_begin(self, epoch, logs={}):
+    def on_epoch_begin(self, epoch, logs=None):
         return
 
-    def on_epoch_end(self, epoch, logs={}):
+    def on_epoch_end(self, epoch, logs=None):
         y_pred = self.model.predict(self.x[:1000])
         roc = roc_auc_score(self.y[:1000], y_pred[:1000], average='weighted')
         y_pred_val = self.model.predict(self.x_val[:1000])
@@ -121,10 +121,10 @@ class RocCallback(Callback):
         print('\rroc-auc: %s - roc-auc_val: %s' % (str(round(roc, 4)), str(round(roc_val, 4))), end=100 * ' ' + '\n')
         return
 
-    def on_batch_begin(self, batch, logs={}):
+    def on_batch_begin(self, batch, logs=None):
         return
 
-    def on_batch_end(self, batch, logs={}):
+    def on_batch_end(self, batch, logs=None):
         return
 
 
