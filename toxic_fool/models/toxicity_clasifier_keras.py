@@ -12,11 +12,15 @@ from keras import initializers
 from keras.callbacks import ModelCheckpoint
 from matplotlib import pyplot as plt
 import os
+from os import path
 from sklearn.metrics import roc_auc_score
 from keras.callbacks import Callback
 
 import data
 from models.toxicity_clasifier import ToxicityClassifier
+from models import calc_recall, calc_precision, calc_f1
+from resources_out import RES_OUT_DIR
+from resources import LATEST_KERAS_WEIGHTS
 
 
 class AttentionWeightedAverage(Layer):
@@ -71,6 +75,12 @@ class AttentionWeightedAverage(Layer):
     def compute_output_shape(self, input_shape):
         output_len = input_shape[2]
         return [(input_shape[0], output_len), (input_shape[0], input_shape[1])]  # [atten_weighted_sum, atten_weights]
+
+    # def compute_mask(self, input, input_mask=None):
+    #     if isinstance(input_mask, list):
+    #         return [None] * len(input_mask)
+    #     else:
+    #         return None
 
 
 class CalcAccuracy(object):
@@ -137,30 +147,35 @@ class CustomLoss(object):
         return loss_function
 
 
+class ToxClassifierKerasConfig(object):
+    def __init__(self,
+                 restore=True,
+                 restore_path=LATEST_KERAS_WEIGHTS,
+                 checkpoint=False,
+                 checkpoint_path=RES_OUT_DIR,
+                 use_gpu=tf.test.is_gpu_available(),
+                 recall_weight=0.001):
+        self.restore = restore
+        self.restore_path = restore_path
+        self.checkpoint = checkpoint
+        self.checkpoint_path = checkpoint_path
+        self.use_gpu = use_gpu
+        self.recall_weight = recall_weight
+
+
 class ToxicityClassifierKeras(ToxicityClassifier):
     # pylint: disable = too-many-arguments
-    def __init__(self, session, max_seq, padded, num_tokens, embed_dim, embedding_matrix, metrics, args):
-        # type: (tf.Session, np.int, bool, np.int, np.int, np.ndarray,list,np.typeDict) -> None
-        if args is not None:
-            self._restore_checkpoint = args.restore_checkpoint
-            self._restore_checkpoint_fullpath = args.restore_checkpoint_fullpath
-            self._save_checkpoint = args.save_checkpoint
-            self._save_checkpoint_path = args.save_checkpoint_path
-            self._use_gpu = args.use_gpu
-            self._recall_weight = args.recall_weight
-        else:
-            self._recall_weight = 0.001
-            self._use_gpu = False
-            self._restore_checkpoint = False
-            self._save_checkpoint = False
-        self._num_tokens = num_tokens
-        self._embed_dim = embed_dim
+    def __init__(self, session, max_seq, embedding_matrix, config=None):
+        # type: (tf.Session, np.int, np.ndarray, ToxClassifierKerasConfig) -> None
+        self._config = config if config else ToxClassifierKerasConfig()
+        self._embedding = embedding_matrix
+        self._num_tokens = embedding_matrix.shape[0]
+        self._embed_dim = embedding_matrix.shape[1]
         self._input_layer = None
         self._output_layer = None
         self._atten_w = None
-        self._embedding = embedding_matrix
-        self._metrics = metrics
-        super(ToxicityClassifierKeras, self).__init__(session=session, max_seq=max_seq, padded=padded)
+        self._metrics = ['accuracy', 'ce', calc_precision, calc_recall, calc_f1]
+        super(ToxicityClassifierKeras, self).__init__(session=session, max_seq=max_seq)
 
     def embedding_layer(self, tensor):
         # TODO consider change to trainable=False
@@ -177,10 +192,11 @@ class ToxicityClassifierKeras(ToxicityClassifier):
         return dropout(tensor)
 
     def bidirectional_rnn(self, tensor, amount=60):
-        if self._use_gpu:
+        if self._config.use_gpu:
             bi_rnn = layers.Bidirectional(layers.CuDNNGRU(amount, return_sequences=True))
         else:
-            bi_rnn = layers.Bidirectional(layers.GRU(amount, return_sequences=True))
+            bi_rnn = layers.Bidirectional(
+                layers.GRU(amount, return_sequences=True, reset_after=True, recurrent_activation='sigmoid'))
         return bi_rnn(tensor)
 
     def concat_layer(self, tensors, axis):
@@ -238,30 +254,39 @@ class ToxicityClassifierKeras(ToxicityClassifier):
 
         model = keras.Model(inputs=self._input_layer, outputs=self._output_layer)
         adam_optimizer = keras.optimizers.Adam(lr=1e-3, decay=1e-6, clipvalue=5)
-        if self._restore_checkpoint:
-            if os.path.exists(self._restore_checkpoint_fullpath):
-                model.load_weights(self._restore_checkpoint_fullpath)
-                print("Restoring weights from " + self._restore_checkpoint_fullpath)
-            else:
-                print("Saved model was not fount at " + self._restore_checkpoint_fullpath + ", starting from scratch")
-        model.compile(loss=CustomLoss.binary_crossentropy_with_bias(self._recall_weight), optimizer=adam_optimizer,
+
+        # restore:
+        if self._config.restore:
+            saved = self._config.restore_path
+            assert path.exists(saved), 'Saved model was not found'
+            model.load_weights(saved)
+            print("Restoring weights from " + saved)
+
+        model.compile(loss=CustomLoss.binary_crossentropy_with_bias(self._config.recall_weight),
+                      optimizer=adam_optimizer,
                       metrics=self._metrics)
+
         model.summary()
         return model
 
-    def train(self, dataset):
-        # type: (data.Dataset) -> keras.callbacks.History
-        callback_list = []
-        if self._save_checkpoint:
-            if not os.path.isdir(self._save_checkpoint_path):
-                os.mkdir(self._save_checkpoint_path)
-            filepath = self._save_checkpoint_path + "/weights-epoch-{epoch:02d}-val_loss-{val_loss:.2f}.hdf5"
-            checkpoint = ModelCheckpoint(filepath, monitor='val_loss', verbose=1, save_best_only=False,
+    def _define_callbacks(self):
+        callback_list = list()
+        if self._config.checkpoint:
+            save_path = self._config.checkpoint_path
+            if not os.path.isdir(save_path):
+                os.mkdir(save_path)
+            file_path = path.join(save_path, "weights-epoch-{epoch:02d}-val_f1-{val_calc_f1:.2f}.hdf5")
+            checkpoint = ModelCheckpoint(file_path, monitor='val_calc_f1', verbose=1, save_best_only=False,
                                          mode='max')
             callback_list.append(checkpoint)
+        return callback_list
+
+    def train(self, dataset):
+        # type: (data.Dataset) -> keras.callbacks.History
+        callback_list = self._define_callbacks()
         callback_list.append(RocCallback(dataset))
-        history = self._model.fit(x=dataset.train_seq[:1000, :], y=dataset.train_lbl[:1000, :], batch_size=500,
-                                  validation_data=(dataset.val_seq[:, :], dataset.val_lbl[:, :]), epochs=30,
+        history = self._model.fit(x=dataset.train_seq[:, :], y=dataset.train_lbl[:, :], batch_size=500,
+                                  validation_data=(dataset.val_seq[:, :], dataset.val_lbl[:, :]), epochs=1,
                                   callbacks=callback_list)
         return history
 
@@ -275,17 +300,41 @@ class ToxicityClassifierKeras(ToxicityClassifier):
         raise NotImplementedError('implemented by child')
 
     def get_gradient(self, seq):
+        # TODO i wanted the function to run faster, and use only toxic for now
         grad_0 = K.gradients(loss=self._model.output[:, 0], variables=self._embedding)[0]
-        grad_1 = K.gradients(loss=self._model.output[:, 1], variables=self._embedding)[0]
-        grad_2 = K.gradients(loss=self._model.output[:, 2], variables=self._embedding)[0]
-        grad_3 = K.gradients(loss=self._model.output[:, 3], variables=self._embedding)[0]
-        grad_4 = K.gradients(loss=self._model.output[:, 4], variables=self._embedding)[0]
-        grad_5 = K.gradients(loss=self._model.output[:, 5], variables=self._embedding)[0]
+        # grad_1 = K.gradients(loss=self._model.output[:, 1], variables=self._embedding)[0]
+        # grad_2 = K.gradients(loss=self._model.output[:, 2], variables=self._embedding)[0]
+        # grad_3 = K.gradients(loss=self._model.output[:, 3], variables=self._embedding)[0]
+        # grad_4 = K.gradients(loss=self._model.output[:, 4], variables=self._embedding)[0]
+        # grad_5 = K.gradients(loss=self._model.output[:, 5], variables=self._embedding)[0]
 
-        grads = [grad_0, grad_1, grad_2, grad_3, grad_4, grad_5]
+        # grads = [grad_0, grad_1, grad_2, grad_3, grad_4, grad_5]
+        grads = [grad_0]
         fn = K.function(inputs=[self._model.input], outputs=grads)
 
         return fn([seq])[0]
+
+    def convert_seq_to_sentence(self, seq, char_index):
+        # convert the char to token dic into token to char dic
+        token_index = {}
+        for key, value in char_index.items():
+            token_index[value] = key
+
+        # convert the seq to sentence
+        sentance = ''
+        for i in range(len(seq)):
+            curr_token = seq[i]
+
+            # `0` is a  reserved   index   that won't be assigned to any word.
+            if curr_token == 0: continue
+
+            curr_char = token_index[curr_token]
+            sentance += curr_char
+
+        return sentance
+
+    def print_seq(self, seq, char_index):
+        print(self.convert_seq_to_sentence(seq, char_index))
 
     def get_attention(self, seq):
         fn = K.function(inputs=[self._model.input], outputs=[self._atten_w])
@@ -327,16 +376,13 @@ def _visualise_attention(seq, attention):
     plt.show()
 
 
-def example(args):
+def example():
     sess = tf.Session()
     embedding_matrix = data.Dataset.init_embedding_from_dump()
-    num_tokens, embed_dim = embedding_matrix.shape
     max_seq = 400
-
-    tox_model = ToxicityClassifierKeras(session=sess, max_seq=max_seq, num_tokens=num_tokens, embed_dim=embed_dim,
-                                        padded=True, embedding_matrix=embedding_matrix,
-                                        metrics=['accuracy', 'ce', CalcAccuracy.precision, CalcAccuracy.recall,
-                                                 CalcAccuracy.f1], args=args)
+    config = ToxClassifierKerasConfig(restore=False)
+    tox_model = ToxicityClassifierKeras(session=sess, max_seq=max_seq, embedding_matrix=embedding_matrix[0],
+                                        config=config)
 
     dataset = data.Dataset.init_from_dump()
     seq = np.expand_dims(dataset.train_seq[0, :], 0)
@@ -365,4 +411,4 @@ def example(args):
 
 
 if __name__ == '__main__':
-    example(args=None)
+    example()
