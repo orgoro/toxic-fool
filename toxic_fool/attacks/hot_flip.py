@@ -24,7 +24,7 @@ class HotFlip(object):
         min_score = np.inf
         i = -1
         for index , flip_status in enumerate(beam_best_flip):
-            if (flip_status.curr_score < min_score):
+            if flip_status.curr_score < min_score:
                 min_score = flip_status.curr_score
                 i = index
 
@@ -35,8 +35,8 @@ class HotFlip(object):
         max_score = -np.inf
 
         best_flip = None
-        for index , flip_status in enumerate(beam_best_flip):
-            if (flip_status.curr_score > max_score):
+        for flip_status in beam_best_flip:
+            if flip_status.curr_score > max_score:
                 max_score = flip_status.curr_score
                 best_flip = flip_status
 
@@ -116,14 +116,14 @@ class HotFlip(object):
                         curr_min_score_in_beam , index = self.get_min_score_in_beam(beam_best_flip)
 
                         if len(beam_best_flip) < self.beam_search_size or curr_score > curr_min_score_in_beam:
-                            index_of_char_to_flip, char_to_check_flip, char_to_flip_to = i, curr_char, j
+                            index_of_char_to_flip, char_to_flip_to = i, j
 
                             #update beam search database with the new flip
                             fliped_squeeze_seq = curr_squeeze_seq.copy()
                             fliped_squeeze_seq[index_of_char_to_flip] = char_to_flip_to
                             new_flip_status = FlipStatus(fliped_sent=fliped_squeeze_seq, curr_score=curr_score)
 
-                            if (len(beam_best_flip) < self.beam_search_size):
+                            if len(beam_best_flip) < self.beam_search_size:
                                 beam_best_flip.append(new_flip_status)
                             else:
                                 beam_best_flip[index] = new_flip_status
