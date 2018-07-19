@@ -13,15 +13,12 @@ from keras.callbacks import ModelCheckpoint
 from matplotlib import pyplot as plt
 import os
 from os import path
-from sklearn.metrics import roc_auc_score
-from keras.callbacks import Callback
 
 import data
 from models.toxicity_clasifier import ToxicityClassifier
-from models import calc_recall, calc_precision, calc_f1
+from models import calc_recall, calc_precision, calc_f1, RocCallback
 from resources_out import RES_OUT_DIR
 from resources import LATEST_KERAS_WEIGHTS
-
 
 class AttentionWeightedAverage(Layer):
     """
@@ -75,67 +72,6 @@ class AttentionWeightedAverage(Layer):
     def compute_output_shape(self, input_shape):
         output_len = input_shape[2]
         return [(input_shape[0], output_len), (input_shape[0], input_shape[1])]  # [atten_weighted_sum, atten_weights]
-
-    # def compute_mask(self, input, input_mask=None):
-    #     if isinstance(input_mask, list):
-    #         return [None] * len(input_mask)
-    #     else:
-    #         return None
-
-
-class CalcAccuracy(object):
-    @staticmethod
-    def recall(y_true, y_pred):
-        true_positives = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
-        possible_positives = K.sum(y_true)
-        recall = true_positives / (possible_positives + K.epsilon())
-        return recall
-
-    @staticmethod
-    def precision(y_true, y_pred):
-        true_positives = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))
-        predicted_positives = K.sum(K.round(K.clip(y_pred, 0, 1)))
-        precision = true_positives / (predicted_positives + K.epsilon())
-        return precision
-
-    @staticmethod
-    def f1(y_true, y_pred):
-        precision = CalcAccuracy.precision(y_true, y_pred)
-        recall = CalcAccuracy.recall(y_true, y_pred)
-        return 2 * ((precision * recall) / (precision + recall + K.epsilon()))
-
-
-class RocCallback(Callback):
-    def __init__(self, dataset):
-        # type: (data.Dataset) -> None
-        self.x = dataset.train_seq
-        self.y = dataset.train_lbl
-        self.x_val = dataset.val_seq
-        self.y_val = dataset.val_lbl
-        super(RocCallback, self).__init__()
-
-    def on_train_begin(self, logs=None):
-        return
-
-    def on_train_end(self, logs=None):
-        return
-
-    def on_epoch_begin(self, epoch, logs=None):
-        return
-
-    def on_epoch_end(self, epoch, logs=None):
-        y_pred = self.model.predict(self.x[:1000])
-        roc = roc_auc_score(self.y[:1000], y_pred[:1000], average='weighted')
-        y_pred_val = self.model.predict(self.x_val[:1000])
-        roc_val = roc_auc_score(self.y_val[:1000], y_pred_val[:1000], average='weighted')
-        print('\rroc-auc: %s - roc-auc_val: %s' % (str(round(roc, 4)), str(round(roc_val, 4))), end=100 * ' ' + '\n')
-        return
-
-    def on_batch_begin(self, batch, logs=None):
-        return
-
-    def on_batch_end(self, batch, logs=None):
-        return
 
 
 class CustomLoss(object):
@@ -286,7 +222,7 @@ class ToxicityClassifierKeras(ToxicityClassifier):
         callback_list = self._define_callbacks()
         callback_list.append(RocCallback(dataset))
         history = self._model.fit(x=dataset.train_seq[:, :], y=dataset.train_lbl[:, :], batch_size=500,
-                                  validation_data=(dataset.val_seq[:, :], dataset.val_lbl[:, :]), epochs=1,
+                                  validation_data=(dataset.val_seq[:, :], dataset.val_lbl[:, :]), epochs=2,
                                   callbacks=callback_list)
         return history
 
@@ -300,7 +236,6 @@ class ToxicityClassifierKeras(ToxicityClassifier):
         raise NotImplementedError('implemented by child')
 
     def get_gradient(self, seq):
-        # TODO i wanted the function to run faster, and use only toxic for now
         grad_0 = K.gradients(loss=self._model.output[:, 0], variables=self._embedding)[0]
         # grad_1 = K.gradients(loss=self._model.output[:, 1], variables=self._embedding)[0]
         # grad_2 = K.gradients(loss=self._model.output[:, 2], variables=self._embedding)[0]
@@ -313,28 +248,6 @@ class ToxicityClassifierKeras(ToxicityClassifier):
         fn = K.function(inputs=[self._model.input], outputs=grads)
 
         return fn([seq])[0]
-
-    def convert_seq_to_sentence(self, seq, char_index):
-        # convert the char to token dic into token to char dic
-        token_index = {}
-        for key, value in char_index.items():
-            token_index[value] = key
-
-        # convert the seq to sentence
-        sentance = ''
-        for i in range(len(seq)):
-            curr_token = seq[i]
-
-            # `0` is a  reserved   index   that won't be assigned to any word.
-            if curr_token == 0: continue
-
-            curr_char = token_index[curr_token]
-            sentance += curr_char
-
-        return sentance
-
-    def print_seq(self, seq, char_index):
-        print(self.convert_seq_to_sentence(seq, char_index))
 
     def get_attention(self, seq):
         fn = K.function(inputs=[self._model.input], outputs=[self._atten_w])
@@ -359,50 +272,65 @@ def _visualize(history):
     plt.show()
 
 
-def _visualise_attention(seq, attention):
-    first_char = np.nonzero(seq)[0][0]
-    only_seq = seq[first_char:]
-    input_length = len(only_seq)
+def _visualise_attention(sent, attention):
+    input_length = len(sent)
     fig = plt.figure(figsize=(input_length / 5, 5))
     ax = fig.add_subplot(1, 1, 1)
 
     width = 20
-    atten_map = np.tile(np.expand_dims(attention[first_char:], 0), reps=[width, 1])
+    atten_map = np.tile(np.expand_dims(attention[-input_length:], 0), reps=[width, 1])
     atten_map = np.repeat(atten_map, width, axis=1)
-    ax.imshow(atten_map, cmap='plasma', interpolation='nearest'), plt.title('attention')
+    plt.imshow(atten_map, cmap='plasma', interpolation='nearest'), plt.title('attention')
     x = list(np.arange(width / 2, width * (input_length + 0.5), width))
+    plt.colorbar(orientation='horizontal')
     ax.set_xticks(x)
-    ax.set_xticklabels(only_seq, rotation=45, fontdict={'fontsize': 8})
+    ax.set_yticks([])
+    ax.set_xticklabels(list(sent), rotation=0, fontdict={'fontsize': 8})
     plt.show()
 
-
-def example():
+def restore():
+    config = ToxClassifierKerasConfig(restore=True)
     sess = tf.Session()
     embedding_matrix = data.Dataset.init_embedding_from_dump()
     max_seq = 400
-    config = ToxClassifierKerasConfig(restore=False)
-    tox_model = ToxicityClassifierKeras(session=sess, max_seq=max_seq, embedding_matrix=embedding_matrix[0],
+    tox_model = ToxicityClassifierKeras(session=sess, embedding_matrix=embedding_matrix[0], max_seq=max_seq,
                                         config=config)
+    return tox_model
+
+def example():
+    # init
+    sess = tf.Session()
+    embedding_matrix, char_idx = data.Dataset.init_embedding_from_dump()
+    max_seq = 400
+    config = ToxClassifierKerasConfig(restore=False)
+    # tox_model = ToxicityClassifierKeras(session=sess, max_seq=max_seq, embedding_matrix=embedding_matrix, config=config)
+    tox_model = restore()
 
     dataset = data.Dataset.init_from_dump()
     seq = np.expand_dims(dataset.train_seq[0, :], 0)
+    sent = data.seq_2_sent(seq[0], char_idx)
+
+    # evaluate before train
     grad_tox = tox_model.get_gradient(seq)
     grad_norm = np.linalg.norm(grad_tox, axis=2)
     print('max grad location {}/{}'.format(np.argmax(grad_norm, axis=1), max_seq))
 
     classes = tox_model.classify(seq)
     atten_w = tox_model.get_attention(seq)
-    _visualise_attention(seq[0], atten_w[0])
+    _visualise_attention(sent, atten_w[0])
     print(classes)
 
+    # train
     history = tox_model.train(dataset)
+
+    # evaluate after train
     grad_tox = tox_model.get_gradient(seq)
     grad_norm = np.linalg.norm(grad_tox, axis=2)
     print('max grad location {}/{}'.format(np.argmax(grad_norm, axis=1), max_seq))
 
     classes = tox_model.classify(seq)
     atten_w = tox_model.get_attention(seq)
-    _visualise_attention(seq[0], atten_w[0])
+    _visualise_attention(sent, atten_w[0])
     print(classes)
     true_classes = dataset.train_lbl[0, :]
     print(true_classes)
