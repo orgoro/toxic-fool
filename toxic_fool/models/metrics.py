@@ -38,11 +38,11 @@ class RocCallback(Callback):
 
     def on_epoch_end(self, epoch, logs=None):
         idx = np.random.randint(self.x.shape[0], size=10000)
-        x = self.x[idx, :]
-        y = self.y[idx, :]
+        x = self.x[idx]
+        y = self.y[idx]
         y_pred = self.model.predict(x)
-        roc = roc_auc_score(self.y[idx], y_pred[:])
-        y_pred_val = self.model.predict(self.x_val[:])
-        roc_val = roc_auc_score(self.y_val[:], y_pred_val[:])
+        roc = roc_auc_score(y, y_pred[:])
+        y_pred_val = self.model.predict(self.x_val)
+        roc_val = roc_auc_score(self.y_val, y_pred_val)
         print('roc-auc: %s - roc-auc_val: %s' % (str(round(roc, 4)), str(round(roc_val, 4))), end=100 * ' ' + '\n')
         return

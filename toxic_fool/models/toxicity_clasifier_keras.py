@@ -20,6 +20,7 @@ from models import calc_recall, calc_precision, calc_f1, RocCallback
 from resources_out import RES_OUT_DIR
 from resources import LATEST_KERAS_WEIGHTS
 
+
 class AttentionWeightedAverage(Layer):
     """
     Computes a weighted average of the different channels across timesteps.
@@ -288,23 +289,31 @@ def _visualise_attention(sent, attention):
     ax.set_xticklabels(list(sent), rotation=0, fontdict={'fontsize': 8})
     plt.show()
 
-def restore():
+
+def restore_model():
     config = ToxClassifierKerasConfig(restore=True)
     sess = tf.Session()
-    embedding_matrix = data.Dataset.init_embedding_from_dump()
+    embedding_matrix, _ = data.Dataset.init_embedding_from_dump()
     max_seq = 400
-    tox_model = ToxicityClassifierKeras(session=sess, embedding_matrix=embedding_matrix[0], max_seq=max_seq,
-                                        config=config)
+    tox_model = ToxicityClassifierKeras(session=sess, embedding_matrix=embedding_matrix, max_seq=max_seq, config=config)
     return tox_model
+
 
 def example():
     # init
-    sess = tf.Session()
+    restore = True
     embedding_matrix, char_idx = data.Dataset.init_embedding_from_dump()
-    max_seq = 400
-    config = ToxClassifierKerasConfig(restore=False)
-    # tox_model = ToxicityClassifierKeras(session=sess, max_seq=max_seq, embedding_matrix=embedding_matrix, config=config)
-    tox_model = restore()
+
+    if restore:
+        tox_model = restore_model()
+    else:
+        sess = tf.Session()
+        max_seq = 400
+        config = ToxClassifierKerasConfig(restore=False)
+        tox_model = ToxicityClassifierKeras(session=sess,
+                                            max_seq=max_seq,
+                                            embedding_matrix=embedding_matrix,
+                                            config=config)
 
     dataset = data.Dataset.init_from_dump()
     seq = np.expand_dims(dataset.train_seq[0, :], 0)
