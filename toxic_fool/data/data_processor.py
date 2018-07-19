@@ -26,10 +26,7 @@ CHAR_INDEX_TEST_DUMP = 'char_index_embedding.npy'
 
 class Dataset(object):
 
-    def __init__(self,
-                 train_seq, train_lbl,
-                 val_seq, val_lbl,
-                 test_seq, test_lbl):
+    def __init__(self, train_seq, train_lbl, val_seq, val_lbl, test_seq, test_lbl):
         self.train_seq = train_seq
         self.val_seq = val_seq
         self.test_seq = test_seq
@@ -39,7 +36,7 @@ class Dataset(object):
 
     @classmethod
     def init_embedding_from_dump(cls):
-        return np.load(path.join(out.RES_OUT_DIR, CHAR_EMBEDDING_TEST_DUMP)) , \
+        return np.load(path.join(out.RES_OUT_DIR, CHAR_EMBEDDING_TEST_DUMP)), \
                np.load(path.join(out.RES_OUT_DIR, CHAR_INDEX_TEST_DUMP)).item()
 
     @classmethod
@@ -109,23 +106,23 @@ class DataProcessor(object):
         return char_list, embeddings_index
 
     # this function was used to create white space embedding once. not needed anymore
-    def gen_embedding_for_whitespace(self, embedding_matrix ):
-        white_space_embedding = np.random.normal(0,1,[1,300]) # np.random.rand(1, 300)
-        matrix_embedding_norm = np.mean( np.linalg.norm(embedding_matrix, axis=1, keepdims=True) )
+    def gen_embedding_for_whitespace(self, embedding_matrix):
+        white_space_embedding = np.random.normal(0, 1, [1, 300])  # np.random.rand(1, 300)
+        matrix_embedding_norm = np.mean(np.linalg.norm(embedding_matrix, axis=1, keepdims=True))
         white_space_embedding_norm = np.linalg.norm(white_space_embedding, axis=1, keepdims=True)
-        white_space_embedding =  white_space_embedding / white_space_embedding_norm * matrix_embedding_norm
+        white_space_embedding = white_space_embedding / white_space_embedding_norm * matrix_embedding_norm
 
         return white_space_embedding
 
     def create_embedding_matrix(self, embeddings_index):
         char_index = self._tokenizer.word_index  # it's actually char and not word. TODO consider fix
-        #embedding_matrix = np.zeros((len(char_index) + 1, res.EMBEDDING_DIM))
-        embedding_matrix = np.zeros((len(char_index), res.EMBEDDING_DIM))
+        embedding_matrix = np.zeros((len(char_index) + 1, res.EMBEDDING_DIM))
+        # embedding_matrix = np.zeros((len(char_index), res.EMBEDDING_DIM))
         for char, i in char_index.items():
             embedding_vector = embeddings_index.get(char)
-            embedding_matrix[i-1] = embedding_vector[:res.EMBEDDING_DIM]
+            embedding_matrix[i] = embedding_vector[:res.EMBEDDING_DIM]
 
-        #self.gen_embedding_for_whitespace(embedding_matrix)
+        # self.gen_embedding_for_whitespace(embedding_matrix)
 
         return embedding_matrix
 
@@ -204,6 +201,26 @@ class DataProcessor(object):
                           val_seq=self.labels_val, val_lbl=self.labels_val,
                           test_seq=self.seq_test, test_lbl=None)
         return dataset
+
+
+def seq_2_sent(seq, char_idx):
+    # convert the char to token dic into token to char dic
+    token_index = {}
+    for key, value in char_idx.items():
+        token_index[value] = key
+
+    # convert the seq to sentence
+    sentance = ''
+    for i in range(len(seq)):
+        curr_token = seq[i]
+
+        # `0` is a  reserved   index   that won't be assigned to any word.
+        if curr_token == 0: continue
+
+        curr_char = token_index[curr_token]
+        sentance += curr_char
+
+    return sentance
 
 
 def example():
