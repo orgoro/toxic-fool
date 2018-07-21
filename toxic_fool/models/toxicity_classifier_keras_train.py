@@ -17,7 +17,7 @@ def train(config):
     sess = tf.Session()
     embedding_matrix = data.Dataset.init_embedding_from_dump()
     max_seq = 400
-    config.train_lables_bias = embedding_matrix[2]
+    config.train_labels_1_ratio = embedding_matrix[2]
     tox_model = ToxicityClassifierKeras(session=sess,
                                         embedding_matrix=embedding_matrix[0],
                                         max_seq=max_seq,
@@ -55,7 +55,6 @@ def main():
                                       checkpoint=args.checkpoint,
                                       checkpoint_path=args.checkpoint_path,
                                       # use_gpu=args.use_gpu,
-                                      recall_weight=args.recall_weight,
                                       run_name=args.run_name)
 
     train(config=config)

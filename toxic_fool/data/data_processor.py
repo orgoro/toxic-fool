@@ -22,7 +22,7 @@ LBL_TEST_DUMP = 'lbl_test.npy'
 
 CHAR_EMBEDDING_TEST_DUMP = 'char_embedding.npy'
 CHAR_INDEX_TEST_DUMP = 'char_index_embedding.npy'
-TRAIN_LABELS_BIAS = 'train_labels_bias.npy'
+TRAIN_LABELS_1_RATIO = 'train_labels_1_ratio.npy'
 
 
 class Dataset(object):
@@ -42,7 +42,7 @@ class Dataset(object):
     def init_embedding_from_dump(cls):
         return np.load(path.join(out.RES_OUT_DIR, CHAR_EMBEDDING_TEST_DUMP)) , \
                np.load(path.join(out.RES_OUT_DIR, CHAR_INDEX_TEST_DUMP)).item(), \
-               np.load(path.join(out.RES_OUT_DIR, TRAIN_LABELS_BIAS))
+               np.load(path.join(out.RES_OUT_DIR, TRAIN_LABELS_1_RATIO))
 
     @classmethod
     def init_from_dump(cls, folder=out.RES_OUT_DIR):
@@ -122,7 +122,6 @@ class DataProcessor(object):
     def create_embedding_matrix(self, embeddings_index):
         char_index = self._tokenizer.word_index  # it's actually char and not word. TODO consider fix
         embedding_matrix = np.zeros((len(char_index) + 1, res.EMBEDDING_DIM))
-        #embedding_matrix = np.zeros((len(char_index), res.EMBEDDING_DIM))
         for char, i in char_index.items():
             embedding_vector = embeddings_index.get(char)
             embedding_matrix[i] = embedding_vector[:res.EMBEDDING_DIM]
@@ -171,8 +170,7 @@ class DataProcessor(object):
         self.labels_train = list(labels[train_idx])
         self.labels_val = list(labels[val_idx])
         train_labels_cnt = sum(self.labels_train)
-        self.train_labels_bias =  len(self.labels_train) / train_labels_cnt
-
+        self.train_labels_1_ratio =  train_labels_cnt / len(self.labels_train)
         self.seq_train = self._tokenizer.texts_to_sequences(text_train[train_idx])
         self.seq_val = self._tokenizer.texts_to_sequences(text_train[val_idx])
         self.seq_test = self._tokenizer.texts_to_sequences(text_test)
@@ -202,7 +200,7 @@ class DataProcessor(object):
         # np.save(path.join(out.RES_OUT_DIR, LBL_TEST_DUMP), self.labels_test)
         np.save(path.join(out.RES_OUT_DIR, CHAR_EMBEDDING_TEST_DUMP), self._embedding_matrix)
         np.save(path.join(out.RES_OUT_DIR, CHAR_INDEX_TEST_DUMP), self._char_index)
-        np.save(path.join(out.RES_OUT_DIR, TRAIN_LABELS_BIAS), self.train_labels_bias)
+        np.save(path.join(out.RES_OUT_DIR, TRAIN_LABELS_1_RATIO), self.train_labels_1_ratio)
 
     def get_dataset(self):
         # type: () -> Dataset
