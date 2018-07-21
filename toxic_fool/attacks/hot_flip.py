@@ -5,13 +5,14 @@ from __future__ import print_function
 import data
 
 import numpy as np
-from models.toxicity_classifier_keras_restore import restore
+import tensorflow as tf
+from models.toxicity_clasifier_keras import ToxicityClassifierKeras
 
 def main():
-
-    tox_model = restore()
+    sess = tf.Session()
+    tox_model = ToxicityClassifierKeras(session=sess)
     ##########################################
-    embedding_matrix, char_to_token_dic = data.Dataset.init_embedding_from_dump()
+    embedding_matrix, char_to_token_dic, _ = data.Dataset.init_embedding_from_dump()
     # get data
     dataset = data.Dataset.init_from_dump()
 

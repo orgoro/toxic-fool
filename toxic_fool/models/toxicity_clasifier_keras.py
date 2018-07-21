@@ -83,9 +83,18 @@ class AttentionWeightedAverage(Layer):
 
 class CustomLoss(object):
     @staticmethod
-    def binary_crossentropy_with_bias(recall_weight, train_labels_bias):
+    def binary_crossentropy_with_bias(train_labels_1_ratio):
+        train_labels_0_ratio = 1 - train_labels_1_ratio
+        train_labels_1_bias = 1 / train_labels_1_ratio
+        train_labels_0_bias = 1 / train_labels_0_ratio
+        train_labels_normalizer = train_labels_0_bias * train_labels_1_bias
+        train_labels_0_bias = train_labels_0_bias / train_labels_normalizer
+        train_labels_1_bias = train_labels_1_bias / train_labels_normalizer
+
         def loss_function(y_true, y_pred):
-            return K.mean(K.binary_crossentropy(y_true, y_pred), axis=-1) + recall_weight * K.sum(np.array(train_labels_bias) * (y_true * (1 - y_pred)))
+            # return tf.losses.sigmoid_cross_entropy(multi_class_labels=y_true, logits=y_pred,weights=train_labels_bias)
+            return K.mean(train_labels_1_bias * K.binary_crossentropy(y_true, y_pred), axis=-1) + K.mean(
+                train_labels_0_bias * K.binary_crossentropy(1 - y_true, 1 - y_pred), axis=-1)
         return loss_function
 
 
@@ -96,22 +105,20 @@ class ToxClassifierKerasConfig(object):
                  checkpoint=False,
                  checkpoint_path=RES_OUT_DIR,
                  use_gpu=tf.test.is_gpu_available(),
-                 train_labels_bias=[0.16, 0.16, 0.17, 0.17, 0.17, 0.17],
-                 recall_weight = 0.01,
-                 run_name = ''):
+                 train_labels_1_ratio=data.Dataset.init_embedding_from_dump()[2],
+                 run_name=''):
         self.restore = restore
         self.restore_path = restore_path
         self.checkpoint = checkpoint
         self.checkpoint_path = checkpoint_path
         self.use_gpu = use_gpu
-        self.train_lables_bias = train_labels_bias
-        self.recall_weight = recall_weight
+        self.train_labels_1_ratio = train_labels_1_ratio
         self.run_name = run_name
 
 
 class ToxicityClassifierKeras(ToxicityClassifier):
     # pylint: disable = too-many-arguments
-    def __init__(self, session, max_seq, embedding_matrix, config=None):
+    def __init__(self, session, max_seq=400, embedding_matrix=data.Dataset.init_embedding_from_dump()[0], config=None):
         # type: (tf.Session, np.int, np.ndarray, ToxClassifierKerasConfig) -> None
         self._config = config if config else ToxClassifierKerasConfig()
         self._embedding = embedding_matrix
@@ -208,9 +215,10 @@ class ToxicityClassifierKeras(ToxicityClassifier):
             model.load_weights(saved)
             print("Restoring weights from " + saved)
 
-        model.compile(loss=CustomLoss.binary_crossentropy_with_bias(self._config.recall_weight, self._config.train_lables_bias),
-                      optimizer=adam_optimizer,
-                      metrics=self._metrics)
+        model.compile(
+            loss=CustomLoss.binary_crossentropy_with_bias(self._config.train_labels_1_ratio),
+            optimizer=adam_optimizer,
+            metrics=self._metrics)
 
         model.summary()
         return model
