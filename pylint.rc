@@ -313,6 +313,7 @@ enable=import-error,
        unused-argument,
        old-style-class,
        no-absolute-import,
+       abstract-method,
        literal-comparison
 
 

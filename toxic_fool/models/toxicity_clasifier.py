@@ -12,7 +12,7 @@ from data import data_processor as process
 class ToxicityClassifier(object):
 
     def __init__(self, session, max_seq):
-        # type: (tf.Session, np.int, bool) -> None
+        # type: (tf.Session, np.int) -> None
         self._session = session
         self._max_seq = max_seq
 
