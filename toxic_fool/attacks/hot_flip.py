@@ -157,7 +157,8 @@ def example():
     # TODO decide which class to attack
 
     # get restore model
-    tox_model = ToxicityClassifierKeras()
+    sess = tf.Session()
+    tox_model = ToxicityClassifierKeras(session=sess)
 
     hot_flip = HotFlip(model=tox_model)
 

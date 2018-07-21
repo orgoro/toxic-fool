@@ -93,6 +93,7 @@ class CustomLoss(object):
 
 
 class ToxClassifierKerasConfig(object):
+    # pylint: disable = too-many-arguments
     def __init__(self,
                  restore=True,
                  restore_path=LATEST_KERAS_WEIGHTS,
