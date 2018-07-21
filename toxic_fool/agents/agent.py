@@ -4,6 +4,7 @@ from __future__ import print_function
 
 import abc
 import numpy as np
+import tensorflow as tf
 
 from models import ToxicityClassifier
 
@@ -23,8 +24,9 @@ class AgentConfig(object):
 
 class Agent(object):
 
-    def __init__(self,  tox_model, config):
-        # type: (ToxicityClassifier, AgentConfig) -> None
+    def __init__(self, sess, tox_model, config):
+        # type: (tf.Session, ToxicityClassifier, AgentConfig) -> None
+        self._sess = sess
         self._config = config
         self._tox_model = tox_model
 
