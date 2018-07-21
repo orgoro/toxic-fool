@@ -49,4 +49,3 @@ class Agent(object):
     @abc.abstractmethod
     def attack(self, seq, target_confidence):
         pass
-
