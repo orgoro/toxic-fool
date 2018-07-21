@@ -8,17 +8,6 @@ import numpy as np
 import tensorflow as tf
 from models.toxicity_clasifier_keras import ToxicityClassifierKeras
 
-def main():
-    sess = tf.Session()
-    tox_model = ToxicityClassifierKeras(session=sess)
-    ##########################################
-    embedding_matrix, char_to_token_dic, _ = data.Dataset.init_embedding_from_dump()
-    # get data
-    dataset = data.Dataset.init_from_dump()
-
-    # taking the first sentence. TODO change
-    seq = np.expand_dims(dataset.train_seq[0, :], 0)
-    true_classes = dataset.train_lbl[0, :]
 class FlipStatus(object):
     #class that hold the curr flip status of the sentence
     def __init__(self, fliped_sent, curr_score):
@@ -168,7 +157,7 @@ def example():
     # TODO decide which class to attack
 
     # get restore model
-    tox_model = restore()
+    tox_model = ToxicityClassifierKeras()
 
     hot_flip = HotFlip(model=tox_model)
 
