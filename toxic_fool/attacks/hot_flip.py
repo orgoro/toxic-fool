@@ -5,7 +5,8 @@ from __future__ import print_function
 import data
 
 import numpy as np
-from models.toxicity_classifier_keras_restore import restore
+import tensorflow as tf
+from models.toxicity_clasifier_keras import ToxicityClassifierKeras
 
 class FlipStatus(object):
     #class that hold the curr flip status of the sentence
@@ -156,7 +157,8 @@ def example():
     # TODO decide which class to attack
 
     # get restore model
-    tox_model = restore()
+    sess = tf.Session()
+    tox_model = ToxicityClassifierKeras(session=sess)
 
     hot_flip = HotFlip(model=tox_model)
 

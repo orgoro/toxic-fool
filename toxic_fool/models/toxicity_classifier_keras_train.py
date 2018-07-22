@@ -17,7 +17,10 @@ def train(config):
     sess = tf.Session()
     embedding_matrix = data.Dataset.init_embedding_from_dump()
     max_seq = 400
-    tox_model = ToxicityClassifierKeras(session=sess, embedding_matrix=embedding_matrix[0], max_seq=max_seq,
+    config.train_labels_1_ratio = embedding_matrix[2]
+    tox_model = ToxicityClassifierKeras(session=sess,
+                                        embedding_matrix=embedding_matrix[0],
+                                        max_seq=max_seq,
                                         config=config)
     dataset = data.Dataset.init_from_dump()
     tox_model.train(dataset)
@@ -41,8 +44,10 @@ def main():
                         dest="checkpoint_path", help='Path of the checkpoint directory to save')
     parser.add_argument('-use_gpu', action='store_true', default=False, dest='use_gpu',
                         help='Whether to use gpu')
-    parser.add_argument('-recall_weight', action='store', type=float, default=0.001, dest='recall_weight',
+    parser.add_argument('-recall_weight', action='store', type=float, default=0.0001, dest='recall_weight',
                         help='Recall weight in loss function')
+    parser.add_argument('-run_name', action="store", default='',
+                        dest="run_name", help='Will be added to the saved checkpoint names')
     args = parser.parse_args()
 
     config = ToxClassifierKerasConfig(restore=args.restore,
@@ -50,7 +55,7 @@ def main():
                                       checkpoint=args.checkpoint,
                                       checkpoint_path=args.checkpoint_path,
                                       # use_gpu=args.use_gpu,
-                                      recall_weight=args.recall_weight)
+                                      run_name=args.run_name)
 
     train(config=config)
 
