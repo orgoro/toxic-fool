@@ -10,12 +10,8 @@ from models.toxicity_clasifier_keras import ToxicityClassifierKeras, ToxClassifi
 
 
 def restore():
-    config = ToxClassifierKerasConfig(restore=True)
     sess = tf.Session()
-    embedding_matrix = data.Dataset.init_embedding_from_dump()
-    max_seq = 400
-    tox_model = ToxicityClassifierKeras(session=sess, embedding_matrix=embedding_matrix[0], max_seq=max_seq,
-                                        config=config)
+    tox_model = ToxicityClassifierKeras(session=sess)
     return tox_model
 
 
