@@ -6,7 +6,8 @@ import abc
 import numpy as np
 import tensorflow as tf
 
-from models import ToxicityClassifier
+import models
+import data
 
 
 class AgentConfig(object):
@@ -25,9 +26,9 @@ class AgentConfig(object):
 class Agent(object):
 
     def __init__(self, sess, tox_model, config):
-        # type: (tf.Session, ToxicityClassifier, AgentConfig) -> None
+        # type: (tf.Session, models.ToxicityClassifier, AgentConfig) -> None
         self._sess = sess
-        self._config = config
+        self._vars = vars(config)
         self._tox_model = tox_model
 
     @abc.abstractmethod
@@ -39,7 +40,7 @@ class Agent(object):
         pass
 
     @abc.abstractmethod
-    def train(self):
+    def train(self, dataset):
         pass
 
     @abc.abstractmethod
