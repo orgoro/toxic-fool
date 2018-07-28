@@ -44,11 +44,11 @@ class Dataset(object):
     @classmethod
     def init_from_dump(cls, folder=out.RES_OUT_DIR):
         assert path.isdir(folder), '{} is not a dir'.format(folder)
-        train_seq = np.load(path.join(out.RES_OUT_DIR, SEQ_TRAIN_DUMP))
-        val_seq = np.load(path.join(out.RES_OUT_DIR, SEQ_VAL_DUMP))
-        test_seq = np.load(path.join(out.RES_OUT_DIR, SEQ_TEST_DUMP))
-        train_lbl = np.load(path.join(out.RES_OUT_DIR, LBL_TRAIN_DUMP))
-        val_lbl = np.load(path.join(out.RES_OUT_DIR, LBL_VAL_DUMP))
+        train_seq = np.load(path.join(folder, SEQ_TRAIN_DUMP))
+        val_seq = np.load(path.join(folder, SEQ_VAL_DUMP))
+        test_seq = np.load(path.join(folder, SEQ_TEST_DUMP))
+        train_lbl = np.load(path.join(folder, LBL_TRAIN_DUMP))
+        val_lbl = np.load(path.join(folder, LBL_VAL_DUMP))
 
         print('dataset loaded from {}...'.format(folder))
         return cls(train_seq=train_seq, train_lbl=train_lbl, val_seq=val_seq, val_lbl=val_lbl,
