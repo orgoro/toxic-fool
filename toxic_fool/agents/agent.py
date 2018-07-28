@@ -12,15 +12,13 @@ import data
 
 class AgentConfig(object):
 
-    def __init__(self):
-        # should be called after child class init
-        self.vars = vars(self)
-
-    def __str__(self):
-        print('________________________')
-        for k, v in self.vars.items():
-            print('|{:10} | {:10}|'.format(k, v))
-        print('________________________')
+    def print(self):
+        print('|-----------------------------------------|')
+        print('|                  CONFIG                 |')
+        print('|-----------------------------------------|')
+        for k, v in vars(self).items():
+            print('|{:25}|{:15}|'.format(k, str(v)))
+        print('|-----------------------------------------|')
 
 
 class Agent(object):
@@ -28,7 +26,7 @@ class Agent(object):
     def __init__(self, sess, tox_model, config):
         # type: (tf.Session, models.ToxicityClassifier, AgentConfig) -> None
         self._sess = sess
-        self._vars = vars(config)
+        self._config_vars = vars(config)
         self._tox_model = tox_model
 
     @abc.abstractmethod

@@ -5,14 +5,14 @@ from __future__ import print_function
 import os
 from os import path
 from time import gmtime, strftime
-
+import numpy as np
 import tensorflow as tf
-import tqdm
 from tensorflow.contrib import slim
+import tqdm
 
-import resources_out as res_out
-import models
 import data
+import models
+import resources_out as res_out
 from agents.agent import Agent, AgentConfig
 
 
@@ -26,7 +26,7 @@ class FlipSelectorConfig(AgentConfig):
                  batch_size=32,
                  num_units=128,
                  number_of_classes=95,
-                 embedding_shape=(96, 400),
+                 embedding_shape=(96, 300),
                  use_crf=False,
                  training_embed=True):
         self.learning_rate = learning_rate
@@ -44,7 +44,7 @@ class FlipSelectorConfig(AgentConfig):
 
 def __str__(self):
     print('________________________')
-    for k, v in self.vars.items():
+    for k, v in self._config_vars.items():
         print('|{:10} | {:10}|'.format(k, v))
     print('________________________')
 
@@ -55,8 +55,8 @@ class FlipSelector(Agent):
         # type: (tf.Session, models.ToxicityClassifier, FlipSelectorConfig) -> None
         self._config = config
 
-        if not tox_model:
-            tox_model = models.ToxicityClassifierKeras(sess)
+        # if not tox_model:
+        #     tox_model = models.ToxicityClassifierKeras(sess)
         super(FlipSelector, self).__init__(sess, tox_model, config)
 
         self._train_op = None
@@ -64,9 +64,10 @@ class FlipSelector(Agent):
         self._probs = None
         self._seq_ph = None
         self._lbl_ph = None
-        self._saver = None
 
+        self._build_graph()
         cur_time = strftime("%Y-%m-%d_%H-%M-%S", gmtime())
+        self._saver = tf.train.Saver(max_to_keep=2)
         self._save_path = path.join(res_out.RES_OUT_DIR, 'flip_selector_' + cur_time)
 
     def _build_graph(self):
@@ -91,12 +92,11 @@ class FlipSelector(Agent):
             _, (state_fwd, state_bwd) = tf.nn.bidirectional_dynamic_rnn(cell_fw=lstm_fw_cell,
                                                                         cell_bw=lstm_bw_cell,
                                                                         inputs=embeded,
-                                                                        sequence_length=seq_len,
                                                                         dtype=tf.float32,
                                                                         scope="BiLSTM")
 
         # Take only last states
-        states = tf.concat([state_fwd, state_bwd], axis=2)
+        states = tf.concat((state_fwd[0], state_bwd[0]), axis=1)
         flat = tf.reshape(states, [-1, 2 * num_units])
 
         logits = slim.fully_connected(flat, num_class, activation_fn=None)
@@ -115,16 +115,12 @@ class FlipSelector(Agent):
         optimizer = tf.train.AdamOptimizer(self._config.learning_rate)
         train_op = optimizer.minimize(loss)
 
-        # Add ops to save and restore all the variables.
-        saver = tf.train.Saver()
-
         # add entry points
         self._seq_ph = seq_ph
         self._lbl_ph = lbl_ph
         self._probs = probs
         self._train_op = train_op
         self._loss = tf.reduce_sum(loss)
-        self._saver = saver
 
     def _embedding_layer(self, ids):
         vocab_shape = self._config.embedding_shape
@@ -136,36 +132,30 @@ class FlipSelector(Agent):
     def _train_step(self):
         return self._train_op
 
-    def _print_config(self):
-        print('|-----------------------------------------|')
-        print('|                  CONFIG                 |')
-        print('|-----------------------------------------|')
-        for k, v in self._vars.items():
-            print('|{:25}|{:15}|'.format(k, v))
-        print('|-----------------------------------------|')
-
-    def _get_seq_batch(self, dataset, batch_num, validation=False):
-        batch_size = self._config.batch_size
-        offset = batch_num * batch_size
+    def _get_seq_batch(self, dataset, batch_num=None, validation=False):
         if not validation:
+            batch_size = self._config.batch_size
+            offset = batch_num * batch_size
             return dataset.train_seq[offset:offset + batch_size]
         else:
-            return dataset.val_seq[offset:offset + batch_size]
+            return dataset.val_seq[:100]
 
-    def _get_lbls_batch(self, dataset, batch_num, validation=False):
-        batch_size = self._config.batch_size
-        offset = batch_num * batch_size
+    def _get_lbls_batch(self, dataset, batch_num=None, validation=False):
         if not validation:
-            return dataset.train_lbl[offset:offset + batch_size]
+            batch_size = self._config.batch_size
+            offset = batch_num * batch_size
+            # return dataset.train_lbl[offset:offset + batch_size]
+            return np.ones_like(dataset.train_seq[offset:offset + batch_size], dtype=np.float32)
         else:
-            return dataset.val_lbl[offset:offset + batch_size]
+            # return dataset.val_lbl
+            return np.ones_like(dataset.val_seq[:100], dtype=np.float32)
 
     def train(self, dataset):
-        self._print_config()
+        self._config.print()
         save_path = self._save_path
         if not path.exists(save_path):
             os.mkdir(save_path)
-        save_path = save_path.join('model.ckpt')
+        save_path = path.join(save_path, 'model.ckpt')
 
         num_epochs = self._config.training_epochs
         batch_size = self._config.batch_size
@@ -175,12 +165,13 @@ class FlipSelector(Agent):
         sess.run(tf.global_variables_initializer())
 
         for e in range(num_epochs):
-            seq = self._get_seq_batch(dataset, b, validation=True)
-            lbls = self._get_lbls_batch(dataset, b, validation=True)
+            seq = self._get_seq_batch(dataset, validation=True)
+            lbls = self._get_lbls_batch(dataset, validation=True)
             feed_dict = {self._seq_ph: seq, self._lbl_ph: lbls}
             fetches = {'loss': self._loss, 'probs': self._probs}
             result = sess.run(fetches, feed_dict)
             print('epoch {:2}/{:2} validation loss: {:5.5} accuracy: XXXX'.format(e, num_epochs, result['loss']))
+            print('saving cheakpoint to: ', save_path)
             self._saver.save(sess, save_path, global_step=e * num_batches)
 
             p_bar = tqdm.tqdm(range(num_batches))
