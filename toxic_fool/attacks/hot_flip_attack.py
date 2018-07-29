@@ -10,9 +10,9 @@ from models.toxicity_clasifier_keras import ToxicityClassifierKeras
 from attacks.hot_flip import HotFlip
 from os import path
 import time
+import resources as out
 
-HOT_FLIP_ATTACK_SAMPLE = 'hot_flip_attack_sample.npy'
-HOT_FLIP_OUT_DIR = path.dirname(path.abspath(__file__))
+HOT_FLIP_ATTACK_SAMPLE =  path.join('data', 'hot_flip_attack_sample.npy')
 
 class HotFlipAttackData(object):
     def __init__(self, hot_flip_status ,sentence_ind):
@@ -33,6 +33,7 @@ class HotFlipAttack(object):
     def create_data(self, hot_flip_status ,sentence_ind):
         curr_flip_status = hot_flip_status
         sent_attacks = []
+        #TODO the data now will be first sentence - last flip
         while(curr_flip_status.prev_flip_status != None): ##the original sentence has prev_flip_status = None
             sent_attacks.append(HotFlipAttackData(curr_flip_status, sentence_ind))
             curr_flip_status = curr_flip_status.prev_flip_status
@@ -40,10 +41,11 @@ class HotFlipAttack(object):
         return sent_attacks
 
     def save_attack_to_file(self, list_of_hot_flip_attack):
-        np.save(path.join(HOT_FLIP_OUT_DIR, HOT_FLIP_ATTACK_SAMPLE), list_of_hot_flip_attack)
+        np.save(path.join(out.RESOURCES_DIR, HOT_FLIP_ATTACK_SAMPLE), list_of_hot_flip_attack)
 
+    @classmethod
     def load_attack_from_file(self):
-        return np.load(path.join(HOT_FLIP_OUT_DIR, HOT_FLIP_ATTACK_SAMPLE))
+        return np.load(path.join(out.RESOURCES_DIR, HOT_FLIP_ATTACK_SAMPLE))
 
     def attack(self):
 
@@ -52,14 +54,14 @@ class HotFlipAttack(object):
         # get data
         dataset = data.Dataset.init_from_dump()
 
-        # taking the first sentence.
-
+        # init list
         list_of_hot_flip_attack = []
 
         #choosing only the toxic sentences
         index_of_toxic_sent = np.where(dataset.train_lbl[:, 0] == 1)[0]
 
-        num_of_seq_to_attack = len(index_of_toxic_sent) if self.num_of_seq_to_attack == None else self.num_of_seq_to_attack
+        num_of_seq_to_attack = len(index_of_toxic_sent) if self.num_of_seq_to_attack == None \
+                                                        else self.num_of_seq_to_attack
 
         #attack first num_of_seq_to_attack sentences
         index_of_toxic_sent = index_of_toxic_sent[: num_of_seq_to_attack]
@@ -71,10 +73,11 @@ class HotFlipAttack(object):
             true_classes = dataset.train_lbl[i, :]
 
             #do hot flip attack
-            best_hot_flip_seq , char_to_token_dic, flip_status = hot_flip.attack(seq = seq , true_classes = true_classes)
+            best_hot_flip_seq , char_to_token_dic, flip_status = hot_flip.attack(seq = seq ,
+                                                                                 true_classes = true_classes)
 
+            #add flip status
             list_of_hot_flip_attack.append( self.create_data(flip_status , i) )
-
 
             # print sentance after the flips
             print("flipped sentence: ")
@@ -101,18 +104,13 @@ class HotFlipAttack(object):
 
         self.save_attack_to_file(list_of_hot_flip_attack)
 
-def softmax(x):
-    """Compute softmax values for each sets of scores in x."""
-    e_x = np.exp(x - np.max(x))
-    return e_x / e_x.sum(axis=0) # only difference
 
 def example():
     # get restore model
     sess = tf.Session()
     tox_model = ToxicityClassifierKeras(session=sess)
 
-
-    #create hot flip attack, and attack 3 seq
+    #create hot flip attack, and attack
     hot_flip_attack = HotFlipAttack(tox_model , num_of_seq_to_attack = 1000)
     hot_flip_attack.attack()
 
