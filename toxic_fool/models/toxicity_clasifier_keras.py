@@ -123,6 +123,7 @@ class ToxicityClassifierKeras(ToxicityClassifier):
         self._output_layer = None
         self._atten_w = None
         self._metrics = ['accuracy', 'ce', calc_precision, calc_recall, calc_f1]
+        self.grad_fn = None
         super(ToxicityClassifierKeras, self).__init__(session=session, max_seq=max_seq)
 
     def embedding_layer(self, tensor):
@@ -249,8 +250,7 @@ class ToxicityClassifierKeras(ToxicityClassifier):
         # type: (np.ndarray, np.ndarray) -> np.ndarray
         raise NotImplementedError('implemented by child')
 
-    def get_gradient(self, seq):
-        grad_0 = K.gradients(loss=self._model.output[:, 0], variables=self._embedding)[0]
+    def get_grad_fn(self):
         # grad_1 = K.gradients(loss=self._model.output[:, 1], variables=self._embedding)[0]
         # grad_2 = K.gradients(loss=self._model.output[:, 2], variables=self._embedding)[0]
         # grad_3 = K.gradients(loss=self._model.output[:, 3], variables=self._embedding)[0]
@@ -258,10 +258,16 @@ class ToxicityClassifierKeras(ToxicityClassifier):
         # grad_5 = K.gradients(loss=self._model.output[:, 5], variables=self._embedding)[0]
 
         # grads = [grad_0, grad_1, grad_2, grad_3, grad_4, grad_5]
+
+        grad_0 = K.gradients(loss=self._model.output[:, 0], variables=self._embedding)[0]
         grads = [grad_0]
         fn = K.function(inputs=[self._model.input], outputs=grads)
+        return fn
 
-        return fn([seq])[0]
+
+    def get_gradient(self, seq):
+        self.grad_fn = self.get_grad_fn() if self.grad_fn == None else self.grad_fn
+        return self.grad_fn([seq])[0]
 
     def get_attention(self, seq):
         fn = K.function(inputs=[self._model.input], outputs=[self._atten_w])
