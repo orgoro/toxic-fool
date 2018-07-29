@@ -34,7 +34,7 @@ class HotFlipAttack(object):
         curr_flip_status = hot_flip_status
         sent_attacks = []
         #TODO the data now will be first sentence - last flip
-        while(curr_flip_status.prev_flip_status != None): ##the original sentence has prev_flip_status = None
+        while curr_flip_status.prev_flip_status != None: ##the original sentence has prev_flip_status = None
             sent_attacks.append(HotFlipAttackData(curr_flip_status, sentence_ind))
             curr_flip_status = curr_flip_status.prev_flip_status
 
@@ -70,11 +70,10 @@ class HotFlipAttack(object):
 
         for i in index_of_toxic_sent:
             seq = np.expand_dims(dataset.train_seq[i, :], 0)
-            true_classes = dataset.train_lbl[i, :]
+            #true_classes = dataset.train_lbl[i, :]
 
             #do hot flip attack
-            best_hot_flip_seq , char_to_token_dic, flip_status = hot_flip.attack(seq = seq ,
-                                                                                 true_classes = true_classes)
+            best_hot_flip_seq , char_to_token_dic, flip_status = hot_flip.attack(seq = seq )
 
             #add flip status
             list_of_hot_flip_attack.append( self.create_data(flip_status , i) )
@@ -83,20 +82,19 @@ class HotFlipAttack(object):
             print("flipped sentence: ")
             print(data.seq_2_sent(best_hot_flip_seq.fliped_sent, char_to_token_dic))
 
-            if (False):
-                # classes before the change
-                print("classes before the flip: ")
-                classes = model.classify(seq)
-                print(classes)
-
-                # classes after the change
-                print("classes after the flip: ")
-                classes = model.classify(np.expand_dims(best_hot_flip_seq.fliped_sent, 0))
-                print(classes)
-
-                #print the true class
-                print("true classes: ")
-                print(true_classes)
+            # # classes before the change
+            # print("classes before the flip: ")
+            # classes = model.classify(seq)
+            # print(classes)
+            #
+            # # classes after the change
+            # print("classes after the flip: ")
+            # classes = model.classify(np.expand_dims(best_hot_flip_seq.fliped_sent, 0))
+            # print(classes)
+            #
+            # #print the true class
+            # print("true classes: ")
+            # print(true_classes)
 
             dur = time.time() - t
             print("dur is: ", dur)

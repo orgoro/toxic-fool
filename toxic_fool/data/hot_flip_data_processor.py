@@ -5,12 +5,7 @@ from __future__ import print_function
 import data
 
 import numpy as np
-import tensorflow as tf
-from models.toxicity_clasifier_keras import ToxicityClassifierKeras
-from attacks.hot_flip import HotFlip
-from os import path
-import time
-from attacks.hot_flip_attack import *
+from attacks.hot_flip_attack import HotFlipAttack
 
 import matplotlib.pyplot as plt #TODO del
 
@@ -65,7 +60,7 @@ class HotFlipDataProcessor(object):
 
     @classmethod
     def get_detector_datasets(self):
-        sentence_token_input, predections_detector, predections_char_selector = self.get_hot_flip_data()
+        sentence_token_input, predections_detector, _ = self.get_hot_flip_data()
 
         detector_dataset = data.Dataset(train_seq = sentence_token_input, train_lbl = predections_detector,
                             val_seq = None, val_lbl = None, test_seq = None, test_lbl = None) #TODO val & test
@@ -74,7 +69,7 @@ class HotFlipDataProcessor(object):
 
     @classmethod
     def get_char_selector_datasets(self):
-        sentence_token_input, predections_detector, predections_char_selector = self.get_hot_flip_data()
+        sentence_token_input, _, predections_char_selector = self.get_hot_flip_data()
 
         char_selector_dataset = data.Dataset(train_seq = sentence_token_input, train_lbl = predections_char_selector,
                             val_seq = None, val_lbl = None, test_seq = None, test_lbl = None) #TODO val & test
@@ -88,7 +83,7 @@ def example():
     char_selector_dataset = HotFlipDataProcessor.get_char_selector_datasets()
 
     # get embedding and token dict
-    embedding_matrix, char_to_token_dic, _ = data.Dataset.init_embedding_from_dump()
+    _, char_to_token_dic, _ = data.Dataset.init_embedding_from_dump()
 
     print("input stentence 0: ")
     print(data.seq_2_sent(detector_dataset.train_seq[0], char_to_token_dic))

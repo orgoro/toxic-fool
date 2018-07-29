@@ -12,6 +12,7 @@ from models.toxicity_clasifier_keras import ToxicityClassifierKeras
 
 class FlipStatus(object):
     #class that hold the curr flip status of the sentence
+    #pylint: disable=too-many-arguments
     def __init__(self, fliped_sent, curr_score,index_of_char_to_flip = None,char_to_flip_to = None,orig_sent = None,
                  grads_in_fliped_char = None, max_flip_grad_per_char=None, prev_flip_status = None):
         self.fliped_sent = fliped_sent
@@ -44,13 +45,13 @@ class HotFlip(object):
     def get_best_hot_flip(self,beam_best_flip):
         max_score = -np.inf
 
-        best_flip = None
+        best_flip_status = None
         for flip_status in beam_best_flip:
             if flip_status.curr_score > max_score:
                 max_score = flip_status.curr_score
-                best_flip = flip_status
+                best_flip_status = flip_status
 
-        return best_flip , flip_status
+        return best_flip_status
 
     def create_initial_beam_search_database(self,curr_squeeze_seq):
         beam_best_flip = []
@@ -68,7 +69,7 @@ class HotFlip(object):
 
         return char_grad_tox
 
-    def attack(self,seq, true_classes):
+    def attack(self,seq):
 
         tox_model = self.tox_model
 
@@ -152,9 +153,9 @@ class HotFlip(object):
 
 
         #get best flip from beam
-        best_hot_flip_seq , best_flip_status = self.get_best_hot_flip(beam_best_flip)
+        best_hot_flip_status  = self.get_best_hot_flip(beam_best_flip)
 
-        return best_hot_flip_seq , char_to_token_dic, best_flip_status
+        return best_hot_flip_status , char_to_token_dic, 
 
 
 
@@ -175,11 +176,11 @@ def example():
     true_classes = dataset.train_lbl[0, :]
 
     #do hot flip attack
-    best_hot_flip_seq , char_to_token_dic, flip_status = hot_flip.attack(seq = seq , true_classes = true_classes)
+    best_flip_status , char_to_token_dic = hot_flip.attack(seq = seq)
 
     # print sentance after the flips
     print("flipped sentence: ")
-    print(data.seq_2_sent(best_hot_flip_seq.fliped_sent, char_to_token_dic))
+    print(data.seq_2_sent(best_flip_status.fliped_sent, char_to_token_dic))
 
     # classes before the change
     print("classes before the flip: ")
@@ -188,7 +189,7 @@ def example():
 
     # classes after the change
     print("classes after the flip: ")
-    classes = tox_model.classify(np.expand_dims(best_hot_flip_seq.fliped_sent, 0))
+    classes = tox_model.classify(np.expand_dims(best_flip_status.fliped_sent, 0))
     print(classes)
 
     #print the true class
