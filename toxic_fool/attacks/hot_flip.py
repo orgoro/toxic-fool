@@ -8,11 +8,21 @@ import numpy as np
 import tensorflow as tf
 from models.toxicity_clasifier_keras import ToxicityClassifierKeras
 
+
+
 class FlipStatus(object):
     #class that hold the curr flip status of the sentence
-    def __init__(self, fliped_sent, curr_score):
+    #pylint: disable=too-many-arguments
+    def __init__(self, fliped_sent, curr_score,index_of_char_to_flip = None,char_to_flip_to = None,orig_sent = None,
+                 grads_in_fliped_char = None, max_flip_grad_per_char=None, prev_flip_status = None):
         self.fliped_sent = fliped_sent
         self.curr_score = curr_score
+        self.index_of_char_to_flip = index_of_char_to_flip
+        self.char_to_flip_to = char_to_flip_to
+        self.orig_sent = orig_sent
+        self.grads_in_fliped_char = grads_in_fliped_char
+        self.max_flip_grad_per_char = max_flip_grad_per_char
+        self.prev_flip_status = prev_flip_status
 
 class HotFlip(object):
     def __init__(self, model , num_of_char_to_flip = 4, beam_search_size = 1):
@@ -35,13 +45,13 @@ class HotFlip(object):
     def get_best_hot_flip(self,beam_best_flip):
         max_score = -np.inf
 
-        best_flip = None
+        best_flip_status = None
         for flip_status in beam_best_flip:
             if flip_status.curr_score > max_score:
                 max_score = flip_status.curr_score
-                best_flip = flip_status
+                best_flip_status = flip_status
 
-        return best_flip
+        return best_flip_status
 
     def create_initial_beam_search_database(self,curr_squeeze_seq):
         beam_best_flip = []
@@ -59,18 +69,18 @@ class HotFlip(object):
 
         return char_grad_tox
 
-    def attack(self,seq, true_classes):
+    def attack(self,seq):
 
         tox_model = self.tox_model
 
         #get embedding and token dict
-        embedding_matrix, char_to_token_dic = data.Dataset.init_embedding_from_dump()
+        embedding_matrix, char_to_token_dic , _ = data.Dataset.init_embedding_from_dump()
 
         # squeeze the seq to vector
         squeeze_seq = seq.squeeze(0)
 
         # print sentence before the flip
-        tox_model.print_seq(squeeze_seq, char_to_token_dic)
+        print( data.seq_2_sent(squeeze_seq, char_to_token_dic) )
 
         # copy the sentence to the output sentence
         curr_squeeze_seq = squeeze_seq.copy()
@@ -79,9 +89,7 @@ class HotFlip(object):
         beam_best_flip = self.create_initial_beam_search_database(curr_squeeze_seq)
 
         # loop on the amount of char to flip
-        # TODO - if i replace a char twice, count it once
         for _ in range(self.num_of_char_to_flip):
-            print("flip number: " , _)
 
             #copy the curr database in order not to iterate over the changed database
             copy_beam_best_flip = beam_best_flip.copy()
@@ -93,22 +101,28 @@ class HotFlip(object):
                 # get grad
                 char_grad_tox = self.get_char_grad_from_seq(tox_model, embedding_matrix, curr_squeeze_seq)
 
-                # going over all the sentence
+                #calc all relevant grads
+                flip_grad_matrix = np.full((tox_model._max_seq,96), -np.inf)
+                max_flip_grad_per_char = np.full((tox_model._max_seq),    -np.inf)
                 for i in range(tox_model._max_seq):
-
                     curr_char = curr_squeeze_seq[i]
-
                     # 0 is special token for nothing , 95 is ' '
                     # TODO do generic.
                     # TODO maybe allow to replace ' ' .
-                    #TODO maybe replace to other english char
+                    # TODO maybe replace to other english char
                     if (curr_char == 0 or curr_char == 95): continue
+                    flip_grad_matrix[i] = char_grad_tox[i][curr_char] - char_grad_tox[i]
+                    max_flip_grad_per_char[i] = np.max(flip_grad_matrix[i])
+
+
+                # going over all the sentence
+                for i in range(tox_model._max_seq):
 
                     # going over all to possible char to flip to
                     for j in range(tox_model._num_tokens):
 
                         #calc score for curr flip
-                        curr_flip_grad_diff = char_grad_tox[i][curr_char] - char_grad_tox[i][j]
+                        curr_flip_grad_diff = flip_grad_matrix[i][j] # char_grad_tox[i][curr_char] - char_grad_tox[i][j]
 
                         #calc score for all flip till now
                         curr_score = curr_flip.curr_score + curr_flip_grad_diff
@@ -122,7 +136,15 @@ class HotFlip(object):
                             #update beam search database with the new flip
                             fliped_squeeze_seq = curr_squeeze_seq.copy()
                             fliped_squeeze_seq[index_of_char_to_flip] = char_to_flip_to
-                            new_flip_status = FlipStatus(fliped_sent=fliped_squeeze_seq, curr_score=curr_score)
+
+                            new_flip_status = FlipStatus(fliped_sent=fliped_squeeze_seq,
+                                                         curr_score=curr_score,
+                                                         index_of_char_to_flip=index_of_char_to_flip,
+                                                         char_to_flip_to=char_to_flip_to,
+                                                         orig_sent=curr_squeeze_seq.copy(),
+                                                         grads_in_fliped_char = flip_grad_matrix[i],
+                                                         max_flip_grad_per_char= max_flip_grad_per_char,
+                                                         prev_flip_status = curr_flip)
 
                             if len(beam_best_flip) < self.beam_search_size:
                                 beam_best_flip.append(new_flip_status)
@@ -130,26 +152,10 @@ class HotFlip(object):
                                 beam_best_flip[index] = new_flip_status
 
 
-                            # # flip char
-                            # print("char number to flip: ", index_of_char_to_flip, "curr char: ",
-                            #       char_to_check_flip, "new char:", char_to_flip_to)
-
-
         #get best flip from beam
-        best_hot_flip_seq = self.get_best_hot_flip(beam_best_flip)
+        best_hot_flip_status  = self.get_best_hot_flip(beam_best_flip)
 
-        # print sentance after the flips
-        tox_model.print_seq(best_hot_flip_seq.fliped_sent, char_to_token_dic)
-
-        # classes before the change
-        classes = tox_model.classify(np.expand_dims(squeeze_seq, 0))
-        print(classes)
-
-        # classes after the change
-        classes = tox_model.classify(np.expand_dims(best_hot_flip_seq.fliped_sent, 0))
-        print(classes)
-
-        print(true_classes)
+        return best_hot_flip_status , char_to_token_dic, 
 
 
 
@@ -170,7 +176,25 @@ def example():
     true_classes = dataset.train_lbl[0, :]
 
     #do hot flip attack
-    hot_flip.attack(seq = seq , true_classes = true_classes)
+    best_flip_status , char_to_token_dic = hot_flip.attack(seq = seq)
+
+    # print sentance after the flips
+    print("flipped sentence: ")
+    print(data.seq_2_sent(best_flip_status.fliped_sent, char_to_token_dic))
+
+    # classes before the change
+    print("classes before the flip: ")
+    classes = tox_model.classify(seq)
+    print(classes)
+
+    # classes after the change
+    print("classes after the flip: ")
+    classes = tox_model.classify(np.expand_dims(best_flip_status.fliped_sent, 0))
+    print(classes)
+
+    #print the true class
+    print("true classes: ")
+    print(true_classes)
 
 
 if __name__ == '__main__':
