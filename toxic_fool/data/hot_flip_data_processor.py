@@ -64,21 +64,28 @@ class HotFlipDataProcessor(object):
         return sentence_token_input , predections_detector , predections_char_selector
 
     @classmethod
-    def init_datasets(self):
+    def get_detector_datasets(self):
         sentence_token_input, predections_detector, predections_char_selector = self.get_hot_flip_data()
 
         detector_dataset = data.Dataset(train_seq = sentence_token_input, train_lbl = predections_detector,
                             val_seq = None, val_lbl = None, test_seq = None, test_lbl = None) #TODO val & test
 
+        return detector_dataset
+
+    @classmethod
+    def get_char_selector_datasets(self):
+        sentence_token_input, predections_detector, predections_char_selector = self.get_hot_flip_data()
+
         char_selector_dataset = data.Dataset(train_seq = sentence_token_input, train_lbl = predections_char_selector,
                             val_seq = None, val_lbl = None, test_seq = None, test_lbl = None) #TODO val & test
 
-        return detector_dataset , char_selector_dataset
+        return char_selector_dataset
 
 def example():
 
     # get hot flip data
-    detector_dataset, char_selector_dataset = HotFlipDataProcessor.init_datasets() #TODO change to get , and split into 2 datasets
+    detector_dataset = HotFlipDataProcessor.get_detector_datasets()
+    char_selector_dataset = HotFlipDataProcessor.get_char_selector_datasets()
 
     # get embedding and token dict
     embedding_matrix, char_to_token_dic, _ = data.Dataset.init_embedding_from_dump()
