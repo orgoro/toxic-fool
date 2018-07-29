@@ -9,3 +9,4 @@ keras
 numpy
 matplotlib
 sklearn
+tqdm
