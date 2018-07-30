@@ -14,7 +14,8 @@ import data
 import models
 import resources_out as res_out
 from agents.agent import Agent, AgentConfig
-
+from data.hot_flip_data_processor import HotFlipDataProcessor
+from attacks.hot_flip_attack import HotFlipAttackData ##needed to load hot flip data
 
 class FlipDetectorConfig(AgentConfig):
     #pylint: disable=too-many-arguments
@@ -195,7 +196,8 @@ class FlipDetector(Agent):
 
 
 def example():
-    dataset = data.Dataset.init_from_dump()
+    #dataset = data.Dataset.init_from_dump()
+    dataset = HotFlipDataProcessor.get_detector_datasets()
     sess = tf.Session()
     model = FlipDetector(sess)
     model.train(dataset)
