@@ -62,7 +62,7 @@ class HotFlipAttack(object):
         index_of_toxic_sent = np.where(labels[:, 0] == 1)[0]
 
         num_of_seq_to_attack = len(index_of_toxic_sent) if self.num_of_seq_to_attack == None \
-                                                        else self.num_of_seq_to_attack
+                                                        else min( self.num_of_seq_to_attack , len(index_of_toxic_sent))
 
         #attack first num_of_seq_to_attack sentences
         index_of_toxic_sent = index_of_toxic_sent[: num_of_seq_to_attack]
@@ -110,7 +110,7 @@ def example():
     tox_model = ToxicityClassifierKeras(session=sess)
 
     #create hot flip attack, and attack
-    hot_flip_attack = HotFlipAttack(tox_model , num_of_seq_to_attack = 3) #TODO
+    hot_flip_attack = HotFlipAttack(tox_model , num_of_seq_to_attack = 1000) #TODO
 
     #load dataset
     dataset = data.Dataset.init_from_dump()
