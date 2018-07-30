@@ -12,7 +12,9 @@ from os import path
 import time
 import resources as out
 
-HOT_FLIP_ATTACK_SAMPLE =  path.join('data', 'hot_flip_attack_sample.npy')
+HOT_FLIP_ATTACK_TRAIN_FILE =  path.join('data', 'hot_flip_attack_train.npy')
+HOT_FLIP_ATTACK_VAL_FILE =  path.join('data', 'hot_flip_attack_val.npy')
+HOT_FLIP_ATTACK_TEST_FILE =  path.join('data', 'hot_flip_attack_test.npy')
 
 class HotFlipAttackData(object):
     def __init__(self, hot_flip_status ,sentence_ind):
@@ -40,25 +42,24 @@ class HotFlipAttack(object):
 
         return sent_attacks
 
-    def save_attack_to_file(self, list_of_hot_flip_attack):
-        np.save(path.join(out.RESOURCES_DIR, HOT_FLIP_ATTACK_SAMPLE), list_of_hot_flip_attack)
+    def save_attack_to_file(self, list_of_hot_flip_attack , file_name):
+        np.save(path.join(out.RESOURCES_DIR, file_name), list_of_hot_flip_attack)
 
     @classmethod
     def load_attack_from_file(self):
-        return np.load(path.join(out.RESOURCES_DIR, HOT_FLIP_ATTACK_SAMPLE))
+        return np.load(path.join(out.RESOURCES_DIR, HOT_FLIP_ATTACK_TRAIN_FILE)),\
+               np.load(path.join(out.RESOURCES_DIR, HOT_FLIP_ATTACK_VAL_FILE))
+        #np.load(path.join(out.RESOURCES_DIR, HOT_FLIP_ATTACK_TEST_FILE))
 
-    def attack(self):
+    def attack(self,data_seq,labels):
 
         hot_flip = HotFlip(model=self.model)
-
-        # get data
-        dataset = data.Dataset.init_from_dump()
 
         # init list
         list_of_hot_flip_attack = []
 
         #choosing only the toxic sentences
-        index_of_toxic_sent = np.where(dataset.train_lbl[:, 0] == 1)[0]
+        index_of_toxic_sent = np.where(labels[:, 0] == 1)[0]
 
         num_of_seq_to_attack = len(index_of_toxic_sent) if self.num_of_seq_to_attack == None \
                                                         else self.num_of_seq_to_attack
@@ -69,18 +70,18 @@ class HotFlipAttack(object):
         t = time.time()
 
         for i in index_of_toxic_sent:
-            seq = np.expand_dims(dataset.train_seq[i, :], 0)
+            seq = np.expand_dims(data_seq[i, :], 0)
             #true_classes = dataset.train_lbl[i, :]
 
             #do hot flip attack
-            best_hot_flip_seq , char_to_token_dic, flip_status = hot_flip.attack(seq = seq )
+            best_hot_flip_status , char_to_token_dic = hot_flip.attack(seq = seq )
 
             #add flip status
-            list_of_hot_flip_attack.append( self.create_data(flip_status , i) )
+            list_of_hot_flip_attack.append( self.create_data(best_hot_flip_status , i) )
 
             # print sentance after the flips
             print("flipped sentence: ")
-            print(data.seq_2_sent(best_hot_flip_seq.fliped_sent, char_to_token_dic))
+            print(data.seq_2_sent(best_hot_flip_status.fliped_sent, char_to_token_dic))
 
             # # classes before the change
             # print("classes before the flip: ")
@@ -100,7 +101,7 @@ class HotFlipAttack(object):
             print("dur is: ", dur)
 
 
-        self.save_attack_to_file(list_of_hot_flip_attack)
+        return list_of_hot_flip_attack
 
 
 def example():
@@ -109,16 +110,31 @@ def example():
     tox_model = ToxicityClassifierKeras(session=sess)
 
     #create hot flip attack, and attack
-    hot_flip_attack = HotFlipAttack(tox_model , num_of_seq_to_attack = 1000)
-    hot_flip_attack.attack()
+    hot_flip_attack = HotFlipAttack(tox_model , num_of_seq_to_attack = 3) #TODO
 
-    list_of_hot_flip_attack = hot_flip_attack.load_attack_from_file()
+    #load dataset
+    dataset = data.Dataset.init_from_dump()
+
+    attack_list = []
+    attack_list.append((dataset.train_seq, dataset.train_lbl, HOT_FLIP_ATTACK_TRAIN_FILE))
+    attack_list.append((dataset.val_seq, dataset.val_lbl, HOT_FLIP_ATTACK_VAL_FILE))
+    #attack_list.append((dataset.test_seq, dataset.test_lbl, HOT_FLIP_ATTACK_TEST_FILE))
+
+    for i in range( len(attack_list)):
+        seq, label, file_name = attack_list[i]
+        #attack this dataset
+        list_of_hot_flip_attack = hot_flip_attack.attack(seq,label)
+        #save to file
+        hot_flip_attack.save_attack_to_file( list_of_hot_flip_attack ,  file_name )
+
+    #load attack data
+    loaded_train_hot_flip_attack , _  = hot_flip_attack.load_attack_from_file()
 
     #the second senetence in data is
-    print("seq of the second sentence: ", list_of_hot_flip_attack[1][0].orig_sent )
+    print("seq of the second train sentence: ", loaded_train_hot_flip_attack[1][0].orig_sent )
 
     #index of char to flip in the first sentence in datatbase, after 1 hot flip
-    print("hot flip second char flip index of the first sentence", list_of_hot_flip_attack[0][1].index_of_char_to_flip)
+    print("hot flip second flip index of the first sentence", loaded_train_hot_flip_attack[0][1].index_of_char_to_flip)
 
     #
 
