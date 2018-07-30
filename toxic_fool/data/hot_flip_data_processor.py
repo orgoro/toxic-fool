@@ -6,6 +6,7 @@ import data
 
 import numpy as np
 from attacks.hot_flip_attack import HotFlipAttack
+from attacks.hot_flip_attack import HotFlipAttackData ##needed to load hot flip data
 
 import matplotlib.pyplot as plt #TODO del
 
@@ -27,16 +28,12 @@ class HotFlipDataProcessor(object):
     #     #self.hot_flip_attack = hot_flip_attack
 
     @classmethod
-    def get_hot_flip_data(self):
-
-        # load hot flip attack
-        list_of_hot_flip_attack = HotFlipAttack.load_attack_from_file()
-
-        max_seq = len( list_of_hot_flip_attack[0][0].orig_sent  )
+    def extract_flip_data(self, list_of_hot_flip_attack):
+        max_seq = len(list_of_hot_flip_attack[0][0].orig_sent)
         num_tokens = len(list_of_hot_flip_attack[0][0].grads_in_fliped_char)
 
         # calc num of attack sentence
-        num_of_sentence_flip_in_database = np.sum( [len(sentences) for sentences in list_of_hot_flip_attack])
+        num_of_sentence_flip_in_database = np.sum([len(sentences) for sentences in list_of_hot_flip_attack])
 
         # init database
         predections_detector = np.zeros([num_of_sentence_flip_in_database, max_seq])
@@ -56,23 +53,42 @@ class HotFlipDataProcessor(object):
                 char_detector_index[index] = sentence.index_of_char_to_flip
                 index += 1
 
-        return sentence_token_input , predections_detector , predections_char_selector
+        return sentence_token_input, predections_detector, predections_char_selector
+
+    @classmethod
+    def get_hot_flip_data(self):
+
+        # load hot flip attack
+        list_of_hot_flip_attack_train, list_of_hot_flip_attack_val  = HotFlipAttack.load_attack_from_file()
+        train_token_input, train_predections_detector, train_predections_char_selector = \
+            self.extract_flip_data(list_of_hot_flip_attack_train)
+
+        val_token_input, val_predections_detector, val_predections_char_selector = \
+            self.extract_flip_data(list_of_hot_flip_attack_val)
+
+        return train_token_input, train_predections_detector, train_predections_char_selector, \
+               val_token_input, val_predections_detector, val_predections_char_selector
+
 
     @classmethod
     def get_detector_datasets(self):
-        sentence_token_input, predections_detector, _ = self.get_hot_flip_data()
+        train_token_input, train_predections_detector, _, \
+        val_token_input, val_predections_detector, _ = self.get_hot_flip_data()
 
-        detector_dataset = data.Dataset(train_seq = sentence_token_input, train_lbl = predections_detector,
-                            val_seq = None, val_lbl = None, test_seq = None, test_lbl = None) #TODO val & test
+        detector_dataset = data.Dataset(train_seq = train_token_input, train_lbl = train_predections_detector,
+                            val_seq = val_token_input, val_lbl = val_predections_detector,
+                                        test_seq = None, test_lbl = None) #TODO test
 
         return detector_dataset
 
     @classmethod
     def get_char_selector_datasets(self):
-        sentence_token_input, _, predections_char_selector = self.get_hot_flip_data()
+        train_token_input, _, train_predections_char_selector, \
+        val_token_input, _, val_predections_char_selector = self.get_hot_flip_data()
 
-        char_selector_dataset = data.Dataset(train_seq = sentence_token_input, train_lbl = predections_char_selector,
-                            val_seq = None, val_lbl = None, test_seq = None, test_lbl = None) #TODO val & test
+        char_selector_dataset = data.Dataset(train_seq = train_token_input, train_lbl = train_predections_char_selector,
+                            val_seq = val_token_input, val_lbl = val_predections_char_selector,
+                                             test_seq = None, test_lbl = None) #TODO test
 
         return char_selector_dataset
 
