@@ -96,7 +96,7 @@ class HotFlip(object):
             best_hot_flip_status = self.get_best_hot_flip(beam_best_flip)
             curr_class = self.tox_model.classify(np.expand_dims(best_hot_flip_status.fliped_sent, 0))[0][0]
             print("curr class: ", curr_class)
-            if (curr_class < self.attack_threshold):
+            if curr_class < self.attack_threshold:
                 break
 
             #copy the curr database in order not to iterate over the changed database
