@@ -4,24 +4,27 @@ from __future__ import print_function
 
 import os
 from os import path
+import time
 from time import gmtime, strftime
 import numpy as np
 import tensorflow as tf
 from tensorflow.contrib import slim
 import tqdm
+import sys
 
 import data
 import models
 import resources_out as res_out
 from agents.agent import Agent, AgentConfig
 from data.hot_flip_data_processor import HotFlipDataProcessor
-from attacks.hot_flip_attack import HotFlipAttackData ##needed to load hot flip data
+from attacks.hot_flip_attack import HotFlipAttackData  ##needed to load hot flip data
+
 
 class FlipDetectorConfig(AgentConfig):
-    #pylint: disable=too-many-arguments
+    # pylint: disable=too-many-arguments
     def __init__(self,
                  learning_rate=0.001,
-                 training_epochs=100,
+                 training_epochs=10,
                  seq_shape=(None, 400),
                  lbls_shape=(None, 400),
                  batch_size=32,
@@ -69,7 +72,7 @@ class FlipDetector(Agent):
         self._build_graph()
         cur_time = strftime("%Y-%m-%d_%H-%M-%S", gmtime())
         self._saver = tf.train.Saver(max_to_keep=2)
-        self._save_path = path.join(res_out.RES_OUT_DIR, 'flip_selector_' + cur_time)
+        self._save_path = path.join(res_out.RES_OUT_DIR, 'flip_detector_' + cur_time)
 
     def _build_graph(self):
         # inputs
@@ -133,22 +136,37 @@ class FlipDetector(Agent):
         return self._train_op
 
     def _get_seq_batch(self, dataset, batch_num=None, validation=False):
+        batch_size = self._config.batch_size
+        offset = batch_num * batch_size
         if not validation:
-            batch_size = self._config.batch_size
-            offset = batch_num * batch_size
             return dataset.train_seq[offset:offset + batch_size]
         else:
-            return dataset.val_seq[:100]
+            return dataset.val_seq[offset:offset + batch_size]
 
     def _get_lbls_batch(self, dataset, batch_num=None, validation=False):
+        batch_size = self._config.batch_size
+        offset = batch_num * batch_size
         if not validation:
-            batch_size = self._config.batch_size
-            offset = batch_num * batch_size
-            # return dataset.train_lbl[offset:offset + batch_size]
-            return np.ones_like(dataset.train_seq[offset:offset + batch_size], dtype=np.float32)
+            return dataset.train_lbl[offset:offset + batch_size]
         else:
-            # return dataset.val_lbl
-            return np.ones_like(dataset.val_seq[:100], dtype=np.float32)
+            return dataset.val_lbl[offset:offset + batch_size]
+
+    def _validate(self, dataset):
+        batch_size = self._config.batch_size
+        num_batches = dataset.val_seq.shape[0] // batch_size
+        sess = self._sess
+        val_loss = 0
+        p_bar = tqdm.tqdm(range(num_batches))
+        p_bar.set_description('validation evaluation')
+        for batch_num in p_bar:
+            seq = self._get_seq_batch(dataset, batch_num, validation=True)
+            lbls = self._get_lbls_batch(dataset, batch_num, validation=True)
+            feed_dict = {self._seq_ph: seq, self._lbl_ph: lbls}
+            fetches = {'loss': self._loss, 'probs': self._probs}
+            result = sess.run(fetches, feed_dict)
+            val_loss += result['loss']
+        accuracy = 'XXXX'
+        return val_loss, accuracy
 
     def train(self, dataset):
         self._config.print()
@@ -163,15 +181,11 @@ class FlipDetector(Agent):
 
         sess = self._sess
         sess.run(tf.global_variables_initializer())
-
         for e in range(num_epochs):
-            seq = self._get_seq_batch(dataset, validation=True)
-            lbls = self._get_lbls_batch(dataset, validation=True)
-            feed_dict = {self._seq_ph: seq, self._lbl_ph: lbls}
-            fetches = {'loss': self._loss, 'probs': self._probs}
-            result = sess.run(fetches, feed_dict)
-            print('epoch {:2}/{:2} validation loss: {:5.5} accuracy: XXXX'.format(e, num_epochs, result['loss']))
+            val_loss, accuracy = self._validate(dataset)
+            print('epoch {:2}/{:2} validation loss: {:5.5} accuracy: {:5.5}'.format(e, num_epochs, val_loss, accuracy))
             print('saving cheakpoint to: ', save_path)
+            time.sleep(0.3)
             self._saver.save(sess, save_path, global_step=e * num_batches)
 
             p_bar = tqdm.tqdm(range(num_batches))
@@ -180,27 +194,39 @@ class FlipDetector(Agent):
                 lbls = self._get_lbls_batch(dataset, b)
 
                 feed_dict = {self._seq_ph: seq, self._lbl_ph: lbls}
-                fetches = {'loss': self._loss, 'probs': self._probs}
+                fetches = {'train_op': self._train_op, 'loss': self._loss, 'probs': self._probs}
 
                 result = sess.run(fetches, feed_dict)
                 p_bar.set_description('epoch {:2}/{:2} | step {:3}/{:3} loss: {:5.5}'.
                                       format(e, num_epochs, b, num_batches, result['loss']))
 
-        sess.close()
-
     def restore(self, restore_path):
         raise NotImplementedError
 
     def attack(self, seq, target_confidence):
-        raise NotImplementedError
+        if len(seq.shape) == 1:
+            seq = np.expand_dims(seq, 0)
+        feed_dict = {self._seq_ph: seq}
+
+        result = self._probs.eval(session=self._sess, feed_dict=feed_dict)
+        return np.argmax(result, 1)
 
 
 def example():
-    #dataset = data.Dataset.init_from_dump()
     dataset = HotFlipDataProcessor.get_detector_datasets()
+    _, char_idx, _ = data.Dataset.init_embedding_from_dump()
     sess = tf.Session()
     model = FlipDetector(sess)
     model.train(dataset)
+
+    seq = dataset.train_seq[0]
+    flip_idx = model.attack(seq, target_confidence=0.)[0]
+
+    sent = data.seq_2_sent(seq, char_idx)
+    flipped_sent = sent[:flip_idx] + '[*]' + sent[min(flip_idx + 1, len(sent)):]
+    print(sent)
+    print(flipped_sent)
+    sess.close()
 
 
 if __name__ == '__main__':
