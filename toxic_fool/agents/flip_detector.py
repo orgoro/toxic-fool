@@ -10,6 +10,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.contrib import slim
 import tqdm
+import sys
 
 import data
 import models
@@ -71,7 +72,7 @@ class FlipDetector(Agent):
         self._build_graph()
         cur_time = strftime("%Y-%m-%d_%H-%M-%S", gmtime())
         self._saver = tf.train.Saver(max_to_keep=2)
-        self._save_path = path.join(res_out.RES_OUT_DIR, 'flip_selector_' + cur_time)
+        self._save_path = path.join(res_out.RES_OUT_DIR, 'flip_detector_' + cur_time)
 
     def _build_graph(self):
         # inputs
@@ -222,7 +223,7 @@ def example():
     flip_idx = model.attack(seq, target_confidence=0.)[0]
 
     sent = data.seq_2_sent(seq, char_idx)
-    flipped_sent = sent[:flip_idx] + '☠' + sent[min(flip_idx + 1, len(sent)):]
+    flipped_sent = sent[:flip_idx] + '[*]' + sent[min(flip_idx + 1, len(sent)):]
     print(sent)
     print(flipped_sent)
     sess.close()
