@@ -35,12 +35,13 @@ class HotFlipAttack(object):
     def create_data(self, hot_flip_status ,sentence_ind):
         curr_flip_status = hot_flip_status
         sent_attacks = []
-        #TODO the data now will be first sentence - last flip
+
         while curr_flip_status.prev_flip_status != None: ##the original sentence has prev_flip_status = None
             sent_attacks.append(HotFlipAttackData(curr_flip_status, sentence_ind))
             curr_flip_status = curr_flip_status.prev_flip_status
 
-        return sent_attacks
+        return sent_attacks[::-1] #reverse list, the first flip will be first in list
+
 
     def save_attack_to_file(self, list_of_hot_flip_attack , file_name):
         np.save(path.join(out.RESOURCES_DIR, file_name), list_of_hot_flip_attack)
@@ -62,40 +63,31 @@ class HotFlipAttack(object):
         index_of_toxic_sent = np.where(labels[:, 0] == 1)[0]
 
         num_of_seq_to_attack = len(index_of_toxic_sent) if self.num_of_seq_to_attack == None \
-                                                        else self.num_of_seq_to_attack
+                                                        else min( self.num_of_seq_to_attack , len(index_of_toxic_sent))
 
         #attack first num_of_seq_to_attack sentences
         index_of_toxic_sent = index_of_toxic_sent[: num_of_seq_to_attack]
 
         t = time.time()
 
-        for i in index_of_toxic_sent:
+        for counter, i in enumerate(index_of_toxic_sent):
             seq = np.expand_dims(data_seq[i, :], 0)
             #true_classes = dataset.train_lbl[i, :]
 
             #do hot flip attack
             best_hot_flip_status , char_to_token_dic = hot_flip.attack(seq = seq )
 
+            #attack sentence
+            curr_hot_flip_attack = self.create_data(best_hot_flip_status , i)
+
             #add flip status
-            list_of_hot_flip_attack.append( self.create_data(best_hot_flip_status , i) )
+            if len(curr_hot_flip_attack) > 0:  #if the original sentence was classify below threshold, len = 0
+                list_of_hot_flip_attack.append( curr_hot_flip_attack )
+
 
             # print sentance after the flips
-            print("flipped sentence: ")
+            print("setence num: ", counter ,"flipped sentence: ")
             print(data.seq_2_sent(best_hot_flip_status.fliped_sent, char_to_token_dic))
-
-            # # classes before the change
-            # print("classes before the flip: ")
-            # classes = model.classify(seq)
-            # print(classes)
-            #
-            # # classes after the change
-            # print("classes after the flip: ")
-            # classes = model.classify(np.expand_dims(best_hot_flip_seq.fliped_sent, 0))
-            # print(classes)
-            #
-            # #print the true class
-            # print("true classes: ")
-            # print(true_classes)
 
             dur = time.time() - t
             print("dur is: ", dur)
@@ -110,7 +102,7 @@ def example():
     tox_model = ToxicityClassifierKeras(session=sess)
 
     #create hot flip attack, and attack
-    hot_flip_attack = HotFlipAttack(tox_model , num_of_seq_to_attack = 3) #TODO
+    hot_flip_attack = HotFlipAttack(tox_model , num_of_seq_to_attack = 1000) #TODO
 
     #load dataset
     dataset = data.Dataset.init_from_dump()
