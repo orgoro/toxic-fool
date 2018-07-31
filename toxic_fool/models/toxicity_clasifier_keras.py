@@ -321,7 +321,7 @@ def restore_model():
 def example():
     # init
     restore = True
-    embedding_matrix, char_idx = data.Dataset.init_embedding_from_dump()
+    embedding_matrix, char_idx, _ = data.Dataset.init_embedding_from_dump()
 
     if restore:
         tox_model = restore_model()
