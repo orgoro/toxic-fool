@@ -25,10 +25,11 @@ class FlipStatus(object):
         self.prev_flip_status = prev_flip_status
 
 class HotFlip(object):
-    def __init__(self, model , num_of_char_to_flip = 4, beam_search_size = 1):
+    def __init__(self, model , num_of_char_to_flip = 7, beam_search_size = 2, attack_threshold = 0.15):
         self.tox_model = model
         self.num_of_char_to_flip = num_of_char_to_flip
         self.beam_search_size = beam_search_size
+        self.attack_threshold = attack_threshold
 
     #get min score in the beam search
     def get_min_score_in_beam(self, beam_best_flip):
@@ -90,6 +91,13 @@ class HotFlip(object):
 
         # loop on the amount of char to flip
         for _ in range(self.num_of_char_to_flip):
+
+            # get best flip from beam
+            best_hot_flip_status = self.get_best_hot_flip(beam_best_flip)
+            curr_class = self.tox_model.classify(np.expand_dims(best_hot_flip_status.fliped_sent, 0))[0][0]
+            print("curr class: ", curr_class)
+            if (curr_class < self.attack_threshold):
+                break
 
             #copy the curr database in order not to iterate over the changed database
             copy_beam_best_flip = beam_best_flip.copy()
