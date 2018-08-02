@@ -48,6 +48,8 @@ def main():
                         help='Recall weight in loss function')
     parser.add_argument('-run_name', action="store", default='',
                         dest="run_name", help='Will be added to the saved checkpoint names')
+    parser.add_argument('-toxic_only', action='store_true', default=False, dest='toxic_only',
+                        help='Whether to train on toxic class only')
     args = parser.parse_args()
 
     config = ToxClassifierKerasConfig(restore=args.restore,
@@ -55,7 +57,8 @@ def main():
                                       checkpoint=args.checkpoint,
                                       checkpoint_path=args.checkpoint_path,
                                       # use_gpu=args.use_gpu,
-                                      run_name=args.run_name)
+                                      run_name=args.run_name,
+                                      train_on_toxic_only=args.toxic_only)
 
     train(config=config)
 
