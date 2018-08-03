@@ -195,8 +195,9 @@ class FlipDetector(Agent):
             for b in p_bar:
                 seq = self._get_seq_batch(dataset, b)
                 lbls = self._get_lbls_batch(dataset, b)
-
-                feed_dict = {self._seq_ph: seq, self._lbl_ph: lbls}
+                lbls_onehot = np.zeros(lbls.shape)
+                lbls_onehot[np.arange(batch_size), np.argmax(lbls, axis=1)] = 1
+                feed_dict = {self._seq_ph: seq, self._lbl_ph: lbls_onehot}
                 fetches = {'train_op': self._train_op, 'loss': self._loss, 'probs': self._probs}
 
                 result = sess.run(fetches, feed_dict)
