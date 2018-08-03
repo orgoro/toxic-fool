@@ -163,6 +163,7 @@ class FlipDetector(Agent):
         sess = self._sess
         val_loss = 0
         correct_pred = 0
+        correct_top_5_pred = 0
         p_bar = tqdm.tqdm(range(num_batches))
         p_bar.set_description('validation evaluation')
         for batch_num in p_bar:
@@ -173,8 +174,11 @@ class FlipDetector(Agent):
             result = sess.run(fetches, feed_dict)
             val_loss += result['loss']
             correct_pred += np.sum(np.argmax(lbls,axis=1) == np.argmax(result['probs'],axis=1))
+            for row in range(0,batch_size-1):
+                correct_top_5_pred += np.sum(np.argmax(lbls[row]) in np.argsort(result['probs'])[row,-5:])
         accuracy = correct_pred / dataset.val_seq.shape[0]
-        return val_loss, accuracy
+        top_5_accuracy = correct_top_5_pred / dataset.val_seq.shape[0]
+        return val_loss, accuracy, top_5_accuracy
 
     def train(self, dataset):
         self._config.print()
@@ -190,9 +194,9 @@ class FlipDetector(Agent):
         sess = self._sess
         sess.run(tf.global_variables_initializer())
         for e in range(num_epochs):
-            val_loss, accuracy = self._validate(dataset)
+            val_loss, accuracy, top_5_accuracy = self._validate(dataset)
             time.sleep(0.3)
-            print('epoch {:2}/{:2} validation loss: {:5.5} accuracy: {:5.5}'.format(e, num_epochs, val_loss, accuracy))
+            print('epoch {:2}/{:2} validation loss: {:5.5} accuracy: {:5.5} top 5 accuracy: {:5.5}'.format(e, num_epochs, val_loss, accuracy,top_5_accuracy))
             print('saving cheakpoint to: ', save_path)
             time.sleep(0.3)
             self._saver.save(sess, save_path, global_step=e * num_batches)
