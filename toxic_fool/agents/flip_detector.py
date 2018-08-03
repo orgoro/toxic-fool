@@ -78,12 +78,17 @@ class FlipDetector(Agent):
         # inputs
         seq_ph = tf.placeholder(tf.int32, self._config.seq_shape, name="seq_ph")
         lbl_ph = tf.placeholder(tf.float32, self._config.lbl_shape, name="lbl_ph")
+        phase = tf.placeholder(tf.bool, name='phase')
 
         # sizes
         num_units = self._config.num_units
         num_class = self._config.seq_shape[1]
 
         embeded = self._embedding_layer(seq_ph)
+        norm_embedded = tf.contrib.layers.batch_norm(embeded,
+                                                     center=True, scale=True,
+                                                     is_training=phase,
+                                                     scope='bn')
 
         # bi-lstm
         # Scope is mandatory to use LSTMCell (https://github.com/tensorflow/tensorflow/issues/799).
@@ -94,7 +99,7 @@ class FlipDetector(Agent):
                 lstm_bw_cell = tf.nn.rnn_cell.LSTMCell(num_units, forget_bias=1.0, state_is_tuple=True)
             _, (state_fwd, state_bwd) = tf.nn.bidirectional_dynamic_rnn(cell_fw=lstm_fw_cell,
                                                                         cell_bw=lstm_bw_cell,
-                                                                        inputs=embeded,
+                                                                        inputs=norm_embedded,
                                                                         dtype=tf.float32,
                                                                         scope="BiLSTM")
 
@@ -121,6 +126,7 @@ class FlipDetector(Agent):
         # add entry points
         self._seq_ph = seq_ph
         self._lbl_ph = lbl_ph
+        self._phase = phase
         self._probs = probs
         self._train_op = train_op
         self._loss = tf.reduce_sum(loss)
@@ -162,7 +168,7 @@ class FlipDetector(Agent):
         for batch_num in p_bar:
             seq = self._get_seq_batch(dataset, batch_num, validation=True)
             lbls = self._get_lbls_batch(dataset, batch_num, validation=True)
-            feed_dict = {self._seq_ph: seq, self._lbl_ph: lbls}
+            feed_dict = {self._seq_ph: seq, self._lbl_ph: lbls, self._phase: False}
             fetches = {'loss': self._loss, 'probs': self._probs}
             result = sess.run(fetches, feed_dict)
             val_loss += result['loss']
@@ -197,7 +203,7 @@ class FlipDetector(Agent):
                 lbls = self._get_lbls_batch(dataset, b)
                 lbls_onehot = np.zeros(lbls.shape)
                 lbls_onehot[np.arange(batch_size), np.argmax(lbls, axis=1)] = 1
-                feed_dict = {self._seq_ph: seq, self._lbl_ph: lbls_onehot}
+                feed_dict = {self._seq_ph: seq, self._lbl_ph: lbls_onehot, self._phase: True}
                 fetches = {'train_op': self._train_op, 'loss': self._loss, 'probs': self._probs}
 
                 result = sess.run(fetches, feed_dict)
