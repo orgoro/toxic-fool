@@ -77,7 +77,7 @@ class AttentionWeightedAverage(Layer):
 
 class CustomLoss(object):
     @staticmethod
-    def binary_crossentropy_with_bias(train_labels_1_ratio):
+    def binary_crossentropy_with_bias(train_labels_1_ratio, train_on_toxic_only=False):
         train_labels_0_ratio = 1 - train_labels_1_ratio
         train_labels_1_bias = 1 / train_labels_1_ratio
         train_labels_0_bias = 1 / train_labels_0_ratio
@@ -86,9 +86,14 @@ class CustomLoss(object):
         train_labels_1_bias = train_labels_1_bias / train_labels_normalizer
 
         def loss_function(y_true, y_pred):
-            # return tf.losses.sigmoid_cross_entropy(multi_class_labels=y_true, logits=y_pred,weights=train_labels_bias)
-            return K.mean(train_labels_1_bias * K.binary_crossentropy(y_true, y_pred), axis=-1) + K.mean(
-                train_labels_0_bias * K.binary_crossentropy(1 - y_true, 1 - y_pred), axis=-1)
+            if train_on_toxic_only:
+                return K.mean(train_labels_1_bias[0] * K.binary_crossentropy(y_true[:, 0], y_pred[:, 0]),
+                              axis=-1) + K.mean(
+                    train_labels_0_bias[0] * K.binary_crossentropy(1 - y_true[:, 0], 1 - y_pred[:, 0]), axis=-1)
+            else:
+                return K.mean(train_labels_1_bias * K.binary_crossentropy(y_true, y_pred), axis=-1) + K.mean(
+                    train_labels_0_bias * K.binary_crossentropy(1 - y_true, 1 - y_pred), axis=-1)
+
         return loss_function
 
 
@@ -101,7 +106,8 @@ class ToxClassifierKerasConfig(object):
                  checkpoint_path=RES_OUT_DIR,
                  use_gpu=tf.test.is_gpu_available(),
                  train_labels_1_ratio=data.Dataset.init_embedding_from_dump()[2],
-                 run_name=''):
+                 run_name='',
+                 train_on_toxic_only=False):
         self.restore = restore
         self.restore_path = restore_path
         self.checkpoint = checkpoint
@@ -109,6 +115,7 @@ class ToxClassifierKerasConfig(object):
         self.use_gpu = use_gpu
         self.train_labels_1_ratio = train_labels_1_ratio
         self.run_name = run_name
+        self.train_on_toxic_only = train_on_toxic_only
 
 
 class ToxicityClassifierKeras(ToxicityClassifier):
@@ -151,6 +158,17 @@ class ToxicityClassifierKeras(ToxicityClassifier):
     def concat_layer(self, tensors, axis):
         return layers.concatenate(tensors, axis=axis)
 
+    def mask_tensor(self, tensor):
+        zeros = K.zeros_like(tensor[:, :, 0], dtype=np.int32)
+        bool_mask = K.not_equal(zeros, self._input_layer)
+        bool_mask_float = tf.cast(bool_mask, np.float32)
+        bool_mask_float = K.tile(K.expand_dims(bool_mask_float), n=(1, 1, 240))
+        return tf.multiply(tensor, bool_mask_float)
+
+    def mask_seq(self, tensor):
+        mask = layers.Lambda(self.mask_tensor)
+        return mask(tensor)
+
     def last_stage(self, tensor):
         last = layers.Lambda(lambda t: t[:, -1], name='last')
         return last(tensor)
@@ -188,18 +206,21 @@ class ToxicityClassifierKeras(ToxicityClassifier):
         rnn1 = self.bidirectional_rnn(dropout1)
         rnn2 = self.bidirectional_rnn(rnn1)
         concat = self.concat_layer([rnn1, rnn2], axis=2)
-
+        mask = self.mask_seq(concat)
         # attentions:
-        avgpool = self.avg_polling_layer(concat)
-        maxpool = self.max_polling_layer(concat)
-        last_stage = self.last_stage(concat)
-        atten, self._atten_w = self.attention_layer(concat)
+        avgpool = self.avg_polling_layer(mask)
+        maxpool = self.max_polling_layer(mask)
+        last_stage = self.last_stage(mask)
+        atten, self._atten_w = self.attention_layer(mask)
         all_views = self.concat_layer([last_stage, maxpool, avgpool, atten], axis=1)
 
         # classify:
         dropout2 = self.dropout_layer(all_views)
         dense = self.dense_layer(dropout2)
-        self._output_layer = self.output_layer(dense)
+        if self._config.train_on_toxic_only:
+            self._output_layer = self.output_layer(dense, out_size=1)
+        else:
+            self._output_layer = self.output_layer(dense)
 
         model = keras.Model(inputs=self._input_layer, outputs=self._output_layer)
         adam_optimizer = keras.optimizers.Adam(lr=1e-3, decay=1e-6, clipvalue=5)
@@ -212,7 +233,8 @@ class ToxicityClassifierKeras(ToxicityClassifier):
             print("Restoring weights from " + saved)
 
         model.compile(
-            loss=CustomLoss.binary_crossentropy_with_bias(self._config.train_labels_1_ratio),
+            loss=CustomLoss.binary_crossentropy_with_bias(self._config.train_labels_1_ratio,
+                                                          self._config.train_on_toxic_only),
             optimizer=adam_optimizer,
             metrics=self._metrics)
 
@@ -236,9 +258,14 @@ class ToxicityClassifierKeras(ToxicityClassifier):
         # type: (data.Dataset) -> keras.callbacks.History
         callback_list = self._define_callbacks()
         callback_list.append(RocCallback(dataset))
-        history = self._model.fit(x=dataset.train_seq[:, :], y=dataset.train_lbl[:, :], batch_size=500,
-                                  validation_data=(dataset.val_seq[:, :], dataset.val_lbl[:, :]), epochs=2,
-                                  callbacks=callback_list)
+        if self._config.train_on_toxic_only:
+            history = self._model.fit(x=dataset.train_seq[:, :], y=dataset.train_lbl[:, 0], batch_size=500,
+                                      validation_data=(dataset.val_seq[:, :], dataset.val_lbl[:, 0]), epochs=50,
+                                      callbacks=callback_list)
+        else:
+            history = self._model.fit(x=dataset.train_seq[:, :], y=dataset.train_lbl[:, :], batch_size=500,
+                                      validation_data=(dataset.val_seq[:, :], dataset.val_lbl[:, :]), epochs=50,
+                                      callbacks=callback_list)
         return history
 
     def classify(self, seq):
@@ -263,7 +290,6 @@ class ToxicityClassifierKeras(ToxicityClassifier):
         grads = [grad_0]
         fn = K.function(inputs=[self._model.input], outputs=grads)
         return fn
-
 
     def get_gradient(self, seq):
         self.grad_fn = self.get_grad_fn() if self.grad_fn == None else self.grad_fn
