@@ -173,9 +173,9 @@ class FlipDetector(Agent):
             fetches = {'loss': self._loss, 'probs': self._probs}
             result = sess.run(fetches, feed_dict)
             val_loss += result['loss']
-            correct_pred += np.sum(np.argmax(lbls,axis=1) == np.argmax(result['probs'],axis=1))
-            for row in range(0,batch_size-1):
-                correct_top_5_pred += np.sum(np.argmax(lbls[row]) in np.argsort(result['probs'])[row,-5:])
+            correct_pred += np.sum(np.argmax(lbls, axis=1) == np.argmax(result['probs'], axis=1))
+            for row in range(0, batch_size - 1):
+                correct_top_5_pred += np.sum(np.argmax(lbls[row]) in np.argsort(result['probs'])[row, -5:])
         accuracy = correct_pred / dataset.val_seq.shape[0]
         top_5_accuracy = correct_top_5_pred / dataset.val_seq.shape[0]
         return val_loss, accuracy, top_5_accuracy
@@ -196,7 +196,11 @@ class FlipDetector(Agent):
         for e in range(num_epochs):
             val_loss, accuracy, top_5_accuracy = self._validate(dataset)
             time.sleep(0.3)
-            print('epoch {:2}/{:2} validation loss: {:5.5} accuracy: {:5.5} top 5 accuracy: {:5.5}'.format(e, num_epochs, val_loss, accuracy,top_5_accuracy))
+            print(
+                f"epoch {e:2}/{num_epochs:2} "
+                f"validation loss: {val_loss:5.5} "
+                f"accuracy: {accuracy:5.5} "
+                f"top5 accuracy: {top_5_accuracy:5.5}")
             print('saving cheakpoint to: ', save_path)
             time.sleep(0.3)
             self._saver.save(sess, save_path, global_step=e * num_batches)

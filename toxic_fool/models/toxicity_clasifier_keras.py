@@ -86,12 +86,14 @@ class CustomLoss(object):
         train_labels_1_bias = train_labels_1_bias / train_labels_normalizer
 
         def loss_function(y_true, y_pred):
-            if (train_on_toxic_only):
-                return K.mean(train_labels_1_bias[0] * K.binary_crossentropy(y_true[:,0], y_pred[:,0]), axis=-1) + K.mean(
-                    train_labels_0_bias[0] * K.binary_crossentropy(1 - y_true[:,0], 1 - y_pred[:,0]), axis=-1)
+            if train_on_toxic_only:
+                return K.mean(train_labels_1_bias[0] * K.binary_crossentropy(y_true[:, 0], y_pred[:, 0]),
+                              axis=-1) + K.mean(
+                    train_labels_0_bias[0] * K.binary_crossentropy(1 - y_true[:, 0], 1 - y_pred[:, 0]), axis=-1)
             else:
                 return K.mean(train_labels_1_bias * K.binary_crossentropy(y_true, y_pred), axis=-1) + K.mean(
-                 train_labels_0_bias * K.binary_crossentropy(1 - y_true, 1 - y_pred), axis=-1)
+                    train_labels_0_bias * K.binary_crossentropy(1 - y_true, 1 - y_pred), axis=-1)
+
         return loss_function
 
 
@@ -216,7 +218,7 @@ class ToxicityClassifierKeras(ToxicityClassifier):
         dropout2 = self.dropout_layer(all_views)
         dense = self.dense_layer(dropout2)
         if self._config.train_on_toxic_only:
-            self._output_layer = self.output_layer(dense,out_size=1)
+            self._output_layer = self.output_layer(dense, out_size=1)
         else:
             self._output_layer = self.output_layer(dense)
 
@@ -231,7 +233,8 @@ class ToxicityClassifierKeras(ToxicityClassifier):
             print("Restoring weights from " + saved)
 
         model.compile(
-            loss=CustomLoss.binary_crossentropy_with_bias(self._config.train_labels_1_ratio, self._config.train_on_toxic_only),
+            loss=CustomLoss.binary_crossentropy_with_bias(self._config.train_labels_1_ratio,
+                                                          self._config.train_on_toxic_only),
             optimizer=adam_optimizer,
             metrics=self._metrics)
 
@@ -257,8 +260,8 @@ class ToxicityClassifierKeras(ToxicityClassifier):
         callback_list.append(RocCallback(dataset))
         if self._config.train_on_toxic_only:
             history = self._model.fit(x=dataset.train_seq[:, :], y=dataset.train_lbl[:, 0], batch_size=500,
-                                  validation_data=(dataset.val_seq[:, :], dataset.val_lbl[:, 0]), epochs=50,
-                                  callbacks=callback_list)
+                                      validation_data=(dataset.val_seq[:, :], dataset.val_lbl[:, 0]), epochs=50,
+                                      callbacks=callback_list)
         else:
             history = self._model.fit(x=dataset.train_seq[:, :], y=dataset.train_lbl[:, :], batch_size=500,
                                       validation_data=(dataset.val_seq[:, :], dataset.val_lbl[:, :]), epochs=50,
@@ -287,7 +290,6 @@ class ToxicityClassifierKeras(ToxicityClassifier):
         grads = [grad_0]
         fn = K.function(inputs=[self._model.input], outputs=grads)
         return fn
-
 
     def get_gradient(self, seq):
         self.grad_fn = self.get_grad_fn() if self.grad_fn == None else self.grad_fn
