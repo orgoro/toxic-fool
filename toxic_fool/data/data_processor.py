@@ -79,13 +79,19 @@ class DataProcessor(object):
         self._embedding_matrix = None  # type: np.ndarray
         self._char_index = None
 
+
     @staticmethod
-    def _clean_text(text_seqs):
-        formatted = str(unicodedata.normalize('NFKD', text_seqs).encode('ascii', 'ignore'))
-        # TODO seems like it delete some chars. need to go over all embedding file, and add all chars to here.
-        exp = re.compile(r'[^(a-z\d\!\@\#\$\%\^\&\ \*\=\?)*]', re.IGNORECASE)
-        clean = exp.sub('', formatted)
-        return clean
+    def _clean_text(text_seqs,char_list):
+
+        #replace '\n' (enter) with '. '
+        text_seqs = re.sub(r"\n", ". ", text_seqs)
+
+        #remove all char that don't apear in embedding
+        chars_in_embedding = ''.join(char_list)
+        chars_i_want = set(chars_in_embedding)
+        text_seqs = ''.join(c for c in text_seqs if c in chars_i_want)
+
+        return text_seqs
 
     @staticmethod
     def get_char_list_and_embedding_index():
@@ -141,12 +147,14 @@ class DataProcessor(object):
         text_train = self._train_d["comment_text"].fillna("no comment").values
         text_test = self._test_d["comment_text"].fillna("no comment").values
 
+        char_list, embedding_index = self.get_char_list_and_embedding_index()
+
         if self._clean_words:
-            text_train = np.asarray([self._clean_text(t) for t in text_train])
-            text_test = np.asarray([self._clean_text(t) for t in text_test])
+            text_train = np.asarray([self._clean_text(t,char_list) for t in text_train])
+            text_test = np.asarray([self._clean_text(t,char_list) for t in text_test])
 
         print('fitting tokenizer...')
-        char_list, embedding_index = self.get_char_list_and_embedding_index()
+
         self._tokenizer.fit_on_texts(texts=char_list)
         self._embedding_matrix = self.create_embedding_matrix(embedding_index)
         self.check_all_data_char_in_embedding(text_train, text_test, embedding_index)
