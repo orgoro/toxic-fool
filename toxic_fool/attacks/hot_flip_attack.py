@@ -3,7 +3,7 @@ from __future__ import division
 from __future__ import print_function
 
 import data
-
+import glob
 import numpy as np
 import tensorflow as tf
 from models.toxicity_clasifier_keras import ToxicityClassifierKeras
@@ -48,9 +48,27 @@ class HotFlipAttack(object):
 
     @classmethod
     def load_attack_from_file(self):
-        return np.load(path.join(out.RESOURCES_DIR, HOT_FLIP_ATTACK_TRAIN_FILE)),\
+
+        hot_flip_attack_training = []
+        list_of_training_files = glob.glob(path.join(out.RESOURCES_DIR, 'data', '*hot_flip_attack_train.npy'))
+        for training_file in  list_of_training_files:
+            loaded_file = np.load(training_file)
+            for j in range( len(loaded_file) ):
+                hot_flip_attack_training.append(loaded_file[j])  #TODO must be better way
+
+        return hot_flip_attack_training,\
                np.load(path.join(out.RESOURCES_DIR, HOT_FLIP_ATTACK_VAL_FILE))
         #np.load(path.join(out.RESOURCES_DIR, HOT_FLIP_ATTACK_TEST_FILE))
+
+    def get_file_name(self,dataset_type,split_num):
+        initial_file_name = 'split_' + str(split_num) + '_'
+        if (dataset_type == 'train'):
+            file_name_to_save = path.join('data', initial_file_name + 'hot_flip_attack_train.npy')
+        else:
+            file_name_to_save = path.join('data', initial_file_name + 'hot_flip_attack_val.npy')
+
+        return file_name_to_save
+
 
     def attack(self,data_seq,labels):
 
@@ -102,22 +120,41 @@ def example():
     tox_model = ToxicityClassifierKeras(session=sess)
 
     #create hot flip attack, and attack
-    hot_flip_attack = HotFlipAttack(tox_model , num_of_seq_to_attack = 1000) #TODO
+    hot_flip_attack = HotFlipAttack(tox_model )
 
     #load dataset
     dataset = data.Dataset.init_from_dump()
 
     attack_list = []
-    attack_list.append((dataset.train_seq, dataset.train_lbl, HOT_FLIP_ATTACK_TRAIN_FILE))
-    attack_list.append((dataset.val_seq, dataset.val_lbl, HOT_FLIP_ATTACK_VAL_FILE))
+    attack_list.append((dataset.train_seq, dataset.train_lbl, 'train'))
+    attack_list.append((dataset.val_seq, dataset.val_lbl, 'val'))
     #attack_list.append((dataset.test_seq, dataset.test_lbl, HOT_FLIP_ATTACK_TEST_FILE))
 
+    num_of_split = 10
+
     for i in range( len(attack_list)):
-        seq, label, file_name = attack_list[i]
-        #attack this dataset
-        list_of_hot_flip_attack = hot_flip_attack.attack(seq,label)
-        #save to file
-        hot_flip_attack.save_attack_to_file( list_of_hot_flip_attack ,  file_name )
+        seq, label, dataset_type = attack_list[i]
+
+        if (len(seq) > 2000) :
+            split_seq = np.array_split(seq, num_of_split)
+            split_labels = np.array_split(label, num_of_split)
+        else:
+            split_seq = seq
+            split_labels = label
+
+        for j in range ( len(split_seq) ):
+            seq_to_attack = split_seq[j]
+            label_to_attack = split_labels[j]
+
+            #attack this dataset
+            list_of_hot_flip_attack = hot_flip_attack.attack(seq_to_attack,label_to_attack)
+            #list_of_hot_flip_attack = []
+            #save to file
+            file_name_to_save = hot_flip_attack.get_file_name(dataset_type , j)
+            hot_flip_attack.save_attack_to_file( list_of_hot_flip_attack ,  file_name_to_save )
+
+            #to free memmory. i don't think it's really needed
+            list_of_hot_flip_attack = None
 
     #load attack data
     loaded_train_hot_flip_attack , _  = hot_flip_attack.load_attack_from_file()
