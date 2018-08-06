@@ -62,7 +62,7 @@ class HotFlipAttack(object):
 
     def get_file_name(self,dataset_type,split_num):
         initial_file_name = 'split_' + str(split_num) + '_'
-        if (dataset_type == 'train'):
+        if dataset_type == 'train':
             file_name_to_save = path.join('data', initial_file_name + 'hot_flip_attack_train.npy')
         else:
             file_name_to_save = path.join('data', initial_file_name + 'hot_flip_attack_val.npy')
@@ -135,7 +135,7 @@ def example():
     for i in range( len(attack_list)):
         seq, label, dataset_type = attack_list[i]
 
-        if (len(seq) > 2000) :
+        if len(seq) > 2000 :
             split_seq = np.array_split(seq, num_of_split)
             split_labels = np.array_split(label, num_of_split)
         else:
