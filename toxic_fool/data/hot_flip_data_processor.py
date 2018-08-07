@@ -30,7 +30,7 @@ class HotFlipDataProcessor(object):
     @classmethod
     def extract_flip_data(self, list_of_hot_flip_attack):
         max_seq = len(list_of_hot_flip_attack[0][0].orig_sent)
-        num_tokens = len(list_of_hot_flip_attack[0][0].grads_in_fliped_char)
+        #num_tokens = len(list_of_hot_flip_attack[0][0].grads_in_fliped_char)
 
         # calc num of attack sentence
         num_of_sentence_flip_in_database = np.sum([len(sentences) for sentences in list_of_hot_flip_attack])
@@ -97,7 +97,7 @@ def example():
 
     # get hot flip data
     detector_dataset = HotFlipDataProcessor.get_detector_datasets()
-    char_selector_dataset = HotFlipDataProcessor.get_char_selector_datasets()
+    #char_selector_dataset = HotFlipDataProcessor.get_char_selector_datasets()
 
     # get embedding and token dict
     _, char_to_token_dic, _ = data.Dataset.init_embedding_from_dump()
