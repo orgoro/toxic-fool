@@ -30,7 +30,7 @@ class HotFlipDataProcessor(object):
     @classmethod
     def extract_flip_data(self, list_of_hot_flip_attack):
         max_seq = len(list_of_hot_flip_attack[0][0].orig_sent)
-        num_tokens = len(list_of_hot_flip_attack[0][0].grads_in_fliped_char)
+        #num_tokens = len(list_of_hot_flip_attack[0][0].grads_in_fliped_char)
 
         # calc num of attack sentence
         num_of_sentence_flip_in_database = np.sum([len(sentences) for sentences in list_of_hot_flip_attack])
@@ -38,8 +38,9 @@ class HotFlipDataProcessor(object):
         # init database
         predections_detector = np.zeros([num_of_sentence_flip_in_database, max_seq])
         sentence_token_input = np.zeros([num_of_sentence_flip_in_database, max_seq])
-        predections_char_selector = np.zeros(
-            [num_of_sentence_flip_in_database, max_seq, num_tokens])
+        predections_char_selector = None
+        # predections_char_selector = np.zeros(
+        #     [num_of_sentence_flip_in_database, max_seq, num_tokens])
         char_detector_index = np.zeros([num_of_sentence_flip_in_database])
 
         # update database from hot flip attack
@@ -48,8 +49,8 @@ class HotFlipDataProcessor(object):
             for sentence in sentence_attack:
                 sentence_token_input[index] = sentence.orig_sent
                 predections_detector[index] = softmax(sentence.max_flip_grad_per_char)
-                predections_char_selector[index][sentence.index_of_char_to_flip] = softmax(
-                    sentence.grads_in_fliped_char)
+                # predections_char_selector[index][sentence.index_of_char_to_flip] = softmax(
+                #     sentence.grads_in_fliped_char)
                 char_detector_index[index] = sentence.index_of_char_to_flip
                 index += 1
 
@@ -96,7 +97,7 @@ def example():
 
     # get hot flip data
     detector_dataset = HotFlipDataProcessor.get_detector_datasets()
-    char_selector_dataset = HotFlipDataProcessor.get_char_selector_datasets()
+    #char_selector_dataset = HotFlipDataProcessor.get_char_selector_datasets()
 
     # get embedding and token dict
     _, char_to_token_dic, _ = data.Dataset.init_embedding_from_dump()
@@ -108,7 +109,7 @@ def example():
     print(detector_dataset.train_lbl[0])
 
     print("prediction char selector: ")
-    print(char_selector_dataset.train_lbl[0])
+    #print(char_selector_dataset.train_lbl[0])
 
     # for i in range (4):
     #     file_name = 'flip_' + str(i) + '.png'
