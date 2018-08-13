@@ -67,8 +67,19 @@ class HotFlipDataProcessor(object):
         val_token_input, val_predections_detector, val_predections_char_selector = \
             self.extract_flip_data(list_of_hot_flip_attack_val)
 
-        return train_token_input, train_predections_detector, train_predections_char_selector, \
-               val_token_input, val_predections_detector, val_predections_char_selector
+        np.random.seed(42)
+        # p = np.random.permutation(len(train_token_input))
+        # train_token_input = train_token_input[p]
+        # train_predections_detector = train_predections_detector[p]
+        # if train_predections_char_selector != None: #TODO - Verify it's not None
+        #     train_predections_char_selector = train_predections_char_selector[p]
+        val_size = 10000
+        return train_token_input[:-val_size],\
+               train_predections_detector[:-val_size],\
+               None, \
+               train_token_input[-val_size:],\
+               train_predections_detector[-val_size:],\
+               None
 
 
     @classmethod
