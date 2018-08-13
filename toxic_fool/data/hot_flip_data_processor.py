@@ -60,12 +60,13 @@ class HotFlipDataProcessor(object):
     def get_hot_flip_data(self):
 
         # load hot flip attack
-        list_of_hot_flip_attack_train, list_of_hot_flip_attack_val  = HotFlipAttack.load_attack_from_file()
-        train_token_input, train_predections_detector, train_predections_char_selector = \
+        # list_of_hot_flip_attack_train, list_of_hot_flip_attack_val  = HotFlipAttack.load_attack_from_file()
+        list_of_hot_flip_attack_train, _ = HotFlipAttack.load_attack_from_file()
+        train_token_input, train_predections_detector, _ = \
             self.extract_flip_data(list_of_hot_flip_attack_train)
 
-        val_token_input, val_predections_detector, val_predections_char_selector = \
-            self.extract_flip_data(list_of_hot_flip_attack_val)
+        # val_token_input, val_predections_detector, val_predections_char_selector = \
+        #     self.extract_flip_data(list_of_hot_flip_attack_val)
 
         np.random.seed(42)
         # p = np.random.permutation(len(train_token_input))
