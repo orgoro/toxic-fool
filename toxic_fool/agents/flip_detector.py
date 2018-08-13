@@ -17,22 +17,27 @@ import models
 import resources_out as res_out
 from agents.agent import Agent, AgentConfig
 from data.hot_flip_data_processor import HotFlipDataProcessor
+from resources import LATEST_DETECTOR_WEIGHTS
 from attacks.hot_flip_attack import HotFlipAttackData  ##needed to load hot flip data
 
 
 class FlipDetectorConfig(AgentConfig):
     # pylint: disable=too-many-arguments
     def __init__(self,
-                 learning_rate=0.001,
-                 training_epochs=10,
+                 learning_rate=5e-5,
+                 training_epochs=100,
                  seq_shape=(None, 400),
                  lbls_shape=(None, 400),
-                 batch_size=32,
-                 num_units=128,
+                 batch_size=64,
+                 num_units=256,
                  number_of_classes=95,
                  embedding_shape=(96, 300),
                  use_crf=False,
-                 training_embed=True):
+                 training_embed=True,
+                 num_hidden=1000,
+                 restore=True,
+                 restore_path=LATEST_DETECTOR_WEIGHTS,
+                 eval_only=False):
         self.learning_rate = learning_rate
         self.training_epochs = training_epochs
         self.seq_shape = seq_shape
@@ -43,6 +48,10 @@ class FlipDetectorConfig(AgentConfig):
         self.number_of_classes = number_of_classes
         self.use_crf = use_crf
         self.train_embed = training_embed
+        self.num_hidden = num_hidden
+        self.restore = restore
+        self.restore_path = restore_path
+        self.eval_only = eval_only
         super(FlipDetectorConfig, self).__init__()
 
 
@@ -64,7 +73,12 @@ class FlipDetector(Agent):
         super(FlipDetector, self).__init__(sess, tox_model, config)
 
         self._train_op = None
+        self._summary_op = None
+        self._summary_all_op = None
         self._loss = None
+        self._val_loss = tf.placeholder(name='val_loss', dtype=tf.float32)
+        self._accuracy = tf.placeholder(name='accuracy',dtype=tf.float32)
+        self._top5_accuracy = tf.placeholder(name='top5_accuracy',dtype=tf.float32)
         self._probs = None
         self._seq_ph = None
         self._lbl_ph = None
@@ -73,22 +87,37 @@ class FlipDetector(Agent):
         cur_time = strftime("%Y-%m-%d_%H-%M-%S", gmtime())
         self._saver = tf.train.Saver(max_to_keep=2)
         self._save_path = path.join(res_out.RES_OUT_DIR, 'flip_detector_' + cur_time)
+        if self._config.restore and self._config.eval_only:
+            self._sess.run(tf.global_variables_initializer())
+            self.restore(self._config.restore_path)
+
+    def build_summary_op(self):
+        self._summary_op = tf.summary.merge([
+            tf.summary.scalar(name="train_loss", tensor=self._loss)]
+        )
+        self._summary_all_op = tf.summary.merge([
+            tf.summary.scalar(name="val_loss", tensor=self._val_loss),
+            tf.summary.scalar(name="accuracy", tensor=self._accuracy),
+            tf.summary.scalar(name="top5_accuracy", tensor=self._top5_accuracy)
+        ]
+
+        )
 
     def _build_graph(self):
         # inputs
         seq_ph = tf.placeholder(tf.int32, self._config.seq_shape, name="seq_ph")
         lbl_ph = tf.placeholder(tf.float32, self._config.lbl_shape, name="lbl_ph")
-        phase = tf.placeholder(tf.bool, name='phase')
+        is_training = tf.placeholder(tf.bool, name='is_training')
+
+        self._seq_ph = seq_ph
+        self._lbl_ph = lbl_ph
+        self._is_training = is_training
 
         # sizes
         num_units = self._config.num_units
         num_class = self._config.seq_shape[1]
 
         embeded = self._embedding_layer(seq_ph)
-        norm_embedded = tf.contrib.layers.batch_norm(embeded,
-                                                     center=True, scale=True,
-                                                     is_training=phase,
-                                                     scope='bn')
 
         # bi-lstm
         # Scope is mandatory to use LSTMCell (https://github.com/tensorflow/tensorflow/issues/799).
@@ -97,18 +126,18 @@ class FlipDetector(Agent):
                 lstm_fw_cell = tf.nn.rnn_cell.LSTMCell(num_units, forget_bias=1.0, state_is_tuple=True)
             with tf.variable_scope('backward'):
                 lstm_bw_cell = tf.nn.rnn_cell.LSTMCell(num_units, forget_bias=1.0, state_is_tuple=True)
-            _, (state_fwd, state_bwd) = tf.nn.bidirectional_dynamic_rnn(cell_fw=lstm_fw_cell,
+            (output_fw, output_bw), _ = tf.nn.bidirectional_dynamic_rnn(cell_fw=lstm_fw_cell,
                                                                         cell_bw=lstm_bw_cell,
-                                                                        inputs=norm_embedded,
+                                                                        inputs=embeded,
                                                                         dtype=tf.float32,
                                                                         scope="BiLSTM")
 
-        # Take only last states
-        states = tf.concat((state_fwd[0], state_bwd[0]), axis=1)
-        flat = tf.reshape(states, [-1, 2 * num_units])
-
-        logits = slim.fully_connected(flat, num_class, activation_fn=None)
-        probs = tf.sigmoid(logits)
+        lstm_output = tf.concat((output_fw, output_bw), axis=2)
+        flat = tf.reshape(lstm_output, [-1, num_class , 2 * num_units ])
+        dropout = tf.layers.dropout(flat, rate = 0.5 * tf.cast(self._is_training, tf.float32))
+        logits = slim.fully_connected(dropout, 1, activation_fn=None)
+        logits = tf.reshape(logits, [-1, num_class])
+        probs = tf.nn.softmax(logits)
 
         # Linear-CRF.
         if self._config.use_crf:
@@ -119,17 +148,18 @@ class FlipDetector(Agent):
             #                                                             original_sequence_lengths)
 
         # Training ops.
-        loss = tf.nn.sigmoid_cross_entropy_with_logits(labels=lbl_ph, logits=logits)
+        loss = tf.nn.softmax_cross_entropy_with_logits_v2(labels=lbl_ph, logits=logits)
         optimizer = tf.train.AdamOptimizer(self._config.learning_rate)
         train_op = optimizer.minimize(loss)
 
         # add entry points
-        self._seq_ph = seq_ph
-        self._lbl_ph = lbl_ph
-        self._phase = phase
+
         self._probs = probs
         self._train_op = train_op
         self._loss = tf.reduce_sum(loss)
+        self.build_summary_op()
+
+
 
     def _embedding_layer(self, ids):
         vocab_shape = self._config.embedding_shape
@@ -169,15 +199,24 @@ class FlipDetector(Agent):
         for batch_num in p_bar:
             seq = self._get_seq_batch(dataset, batch_num, validation=True)
             lbls = self._get_lbls_batch(dataset, batch_num, validation=True)
-            feed_dict = {self._seq_ph: seq, self._lbl_ph: lbls, self._phase: False}
+            lbls_onehot = np.zeros(lbls.shape)
+            lbls_onehot[np.arange(batch_size), np.argmax(lbls, axis=1)] = 1
+            feed_dict = {self._seq_ph: seq, self._lbl_ph: lbls_onehot, self._is_training: False}
             fetches = {'loss': self._loss, 'probs': self._probs}
             result = sess.run(fetches, feed_dict)
             val_loss += result['loss']
             correct_pred += np.sum(np.argmax(lbls, axis=1) == np.argmax(result['probs'], axis=1))
+            top_5_label_args = np.argsort(lbls , axis=1)
             for row in range(0, batch_size - 1):
-                correct_top_5_pred += np.sum(np.argmax(lbls[row]) in np.argsort(result['probs'])[row, -5:])
+                correct_top_5_pred += np.sum(np.argmax(result['probs'][row]) in top_5_label_args[row, -5:] )
+        val_loss = val_loss / dataset.val_seq.shape[0]
         accuracy = correct_pred / dataset.val_seq.shape[0]
         top_5_accuracy = correct_top_5_pred / dataset.val_seq.shape[0]
+        if self._config.eval_only:
+            print('validation loss: {:5.5} accuracy: {:5.5} top5 accuracy: {:5.5}'.format(
+                                                                                        val_loss,
+                                                                                        accuracy,
+                                                                                        top_5_accuracy))
         return val_loss, accuracy, top_5_accuracy
 
     def train(self, dataset):
@@ -185,7 +224,7 @@ class FlipDetector(Agent):
         save_path = self._save_path
         if not path.exists(save_path):
             os.mkdir(save_path)
-        save_path = path.join(save_path, 'model.ckpt')
+        save_path = path.join(save_path, 'detector_model.ckpt')
 
         num_epochs = self._config.training_epochs
         batch_size = self._config.batch_size
@@ -193,33 +232,46 @@ class FlipDetector(Agent):
 
         sess = self._sess
         sess.run(tf.global_variables_initializer())
+        if self._config.restore:
+            self.restore(self._config.restore_path)
         for e in range(num_epochs):
-            val_loss, accuracy, top_5_accuracy = self._validate(dataset)
+            summary_writer = tf.summary.FileWriter(self._save_path, flush_secs=30, graph=sess.graph)
+            val_loss, accuracy, top5_accuracy = self._validate(dataset)
+            sum_tb = self._summary_all_op.eval(session=sess, feed_dict={self._val_loss: val_loss,
+                                                                     self._accuracy: accuracy,
+                                                                     self._top5_accuracy: top5_accuracy})
+            summary_writer.add_summary(sum_tb, e*num_batches)
             time.sleep(0.3)
-            print(
-                f"epoch {e:2}/{num_epochs:2} "
-                f"validation loss: {val_loss:5.5} "
-                f"accuracy: {accuracy:5.5} "
-                f"top5 accuracy: {top_5_accuracy:5.5}")
+            print('epoch {:2}/{:2} validation loss: {:5.5} accuracy: {:5.5} top5 accuracy: {:5.5}'.
+                  format(e, num_epochs,val_loss,accuracy,top5_accuracy))
             print('saving cheakpoint to: ', save_path)
             time.sleep(0.3)
             self._saver.save(sess, save_path, global_step=e * num_batches)
 
             p_bar = tqdm.tqdm(range(num_batches))
             for b in p_bar:
-                seq = self._get_seq_batch(dataset, b)
+                seq = self._get_seq_batch(dataset, b) #TODO i think the dataset is not suffled.
                 lbls = self._get_lbls_batch(dataset, b)
                 lbls_onehot = np.zeros(lbls.shape)
-                lbls_onehot[np.arange(batch_size), np.argmax(lbls, axis=1)] = 1
-                feed_dict = {self._seq_ph: seq, self._lbl_ph: lbls_onehot, self._phase: True}
-                fetches = {'train_op': self._train_op, 'loss': self._loss, 'probs': self._probs}
+                lbls_onehot[np.arange(batch_size), np.argmax(lbls, axis=1)] =1
+                feed_dict = {self._seq_ph: seq, self._lbl_ph: lbls_onehot, self._is_training: True}
+                fetches = {'train_op': self._train_op,
+                           'loss': self._loss,
+                           'probs': self._probs,
+                           'sum': self._summary_op}
 
                 result = sess.run(fetches, feed_dict)
+                summary_writer.add_summary(result['sum'], e * num_batches + b)
                 p_bar.set_description('epoch {:2}/{:2} | step {:3}/{:3} loss: {:5.5}'.
-                                      format(e, num_epochs, b, num_batches, result['loss']))
+                                      format(e, num_epochs, b, num_batches, result['loss'] / batch_size))
 
     def restore(self, restore_path):
-        raise NotImplementedError
+        # restore:
+        saved = self._config.restore_path
+        sess = self._sess
+        # assert path.exists(saved), 'Saved model was not found'
+        self._saver.restore(sess, saved)
+        print("Restoring weights from " + saved)
 
     def attack(self, seq, target_confidence):
         if len(seq.shape) == 1:
@@ -234,7 +286,9 @@ def example():
     dataset = HotFlipDataProcessor.get_detector_datasets()
     _, char_idx, _ = data.Dataset.init_embedding_from_dump()
     sess = tf.Session()
-    model = FlipDetector(sess)
+    config = FlipDetectorConfig(eval_only=False)
+    model = FlipDetector(sess, config=config)
+    # model._validate(dataset)
     model.train(dataset)
 
     seq = dataset.train_seq[0]
