@@ -86,9 +86,11 @@ def smart_replace(char):
     replacement = _replace_char(is_upper, row_idx, char_idx)
     return replacement
 
-
-if __name__ == '__main__':
+def example():
     sent = 'Hey this is what I think!'
     print(sent)
     sent = smart_replace(sent[0]) + sent[1:6] + smart_replace(sent[6]) + sent[7:]
     print(sent)
+
+if __name__ == '__main__':
+    example()
