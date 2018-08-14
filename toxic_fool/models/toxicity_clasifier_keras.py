@@ -338,7 +338,7 @@ def _visualise_attention(sent, attention):
 def restore_model():
     config = ToxClassifierKerasConfig(restore=True)
     sess = tf.Session()
-    embedding_matrix, _ = data.Dataset.init_embedding_from_dump()
+    embedding_matrix, _ , _ = data.Dataset.init_embedding_from_dump()
     max_seq = 400
     tox_model = ToxicityClassifierKeras(session=sess, embedding_matrix=embedding_matrix, max_seq=max_seq, config=config)
     return tox_model
@@ -346,14 +346,15 @@ def restore_model():
 
 def example():
     # init
-    restore = True
+    restore = False
     embedding_matrix, char_idx, _ = data.Dataset.init_embedding_from_dump()
+
+    max_seq = 400
 
     if restore:
         tox_model = restore_model()
     else:
         sess = tf.Session()
-        max_seq = 400
         config = ToxClassifierKerasConfig(restore=False)
         tox_model = ToxicityClassifierKeras(session=sess,
                                             max_seq=max_seq,
