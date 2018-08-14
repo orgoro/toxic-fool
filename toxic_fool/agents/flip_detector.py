@@ -254,7 +254,7 @@ class FlipDetector(Agent):
             p_bar = tqdm.tqdm(range(num_batches))
             for b in p_bar:
                 seq = self._get_seq_batch(dataset, b) #TODO i think the dataset is not suffled.
-                lbls, lbls_onehot = self._get_lbls_batch(dataset, b)
+                _, lbls_onehot = self._get_lbls_batch(dataset, b)
                 if self._config.mask_logits:
                     mask = (seq != 0)
                 else:
