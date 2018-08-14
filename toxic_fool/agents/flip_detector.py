@@ -28,16 +28,16 @@ class FlipDetectorConfig(AgentConfig):
                  training_epochs=100,
                  seq_shape=(None, 400),
                  lbls_shape=(None, 400),
-                 batch_size=64,
+                 batch_size=128,
                  num_units=256,
                  number_of_classes=95,
                  embedding_shape=(96, 300),
-                 use_crf=False,
                  training_embed=True,
                  num_hidden=1000,
                  restore=True,
                  restore_path=LATEST_DETECTOR_WEIGHTS,
-                 eval_only=False):
+                 eval_only=False,
+                 mask_logits=False):
         self.learning_rate = learning_rate
         self.training_epochs = training_epochs
         self.seq_shape = seq_shape
@@ -46,12 +46,12 @@ class FlipDetectorConfig(AgentConfig):
         self.batch_size = batch_size
         self.num_units = num_units  # the number of units in the LSTM cell
         self.number_of_classes = number_of_classes
-        self.use_crf = use_crf
         self.train_embed = training_embed
         self.num_hidden = num_hidden
         self.restore = restore
         self.restore_path = restore_path
         self.eval_only = eval_only
+        self.mask_logits = mask_logits
         super(FlipDetectorConfig, self).__init__()
 
 
@@ -68,8 +68,6 @@ class FlipDetector(Agent):
         # type: (tf.Session, models.ToxicityClassifier, FlipDetectorConfig) -> None
         self._config = config
 
-        # if not tox_model:
-        #     tox_model = models.ToxicityClassifierKeras(sess)
         super(FlipDetector, self).__init__(sess, tox_model, config)
 
         self._train_op = None
@@ -85,7 +83,7 @@ class FlipDetector(Agent):
 
         self._build_graph()
         cur_time = strftime("%Y-%m-%d_%H-%M-%S", gmtime())
-        self._saver = tf.train.Saver(max_to_keep=2)
+        self._saver = tf.train.Saver()
         self._save_path = path.join(res_out.RES_OUT_DIR, 'flip_detector_' + cur_time)
         if self._config.restore and self._config.eval_only:
             self._sess.run(tf.global_variables_initializer())
@@ -108,10 +106,8 @@ class FlipDetector(Agent):
         seq_ph = tf.placeholder(tf.int32, self._config.seq_shape, name="seq_ph")
         lbl_ph = tf.placeholder(tf.float32, self._config.lbl_shape, name="lbl_ph")
         is_training = tf.placeholder(tf.bool, name='is_training')
+        mask_ph = tf.placeholder(tf.float32, self._config.seq_shape, name="mask_ph")
 
-        self._seq_ph = seq_ph
-        self._lbl_ph = lbl_ph
-        self._is_training = is_training
 
         # sizes
         num_units = self._config.num_units
@@ -134,26 +130,25 @@ class FlipDetector(Agent):
 
         lstm_output = tf.concat((output_fw, output_bw), axis=2)
         flat = tf.reshape(lstm_output, [-1, num_class , 2 * num_units ])
-        dropout = tf.layers.dropout(flat, rate = 0.5 * tf.cast(self._is_training, tf.float32))
-        logits = slim.fully_connected(dropout, 1, activation_fn=None)
-        logits = tf.reshape(logits, [-1, num_class])
-        probs = tf.nn.softmax(logits)
 
-        # Linear-CRF.
-        if self._config.use_crf:
-            raise NotImplementedError('crf not implemented')
-            # log_likelihood, transition_params = tf.contrib.crf.crf_log_likelihood(probs, lbl_ph, seq_len)
-            # # Compute the viterbi sequence and score (used for prediction and test time).
-            # viterbi_sequence, viterbi_score = tf.contrib.crf.crf_decode(scores, transition_params,
-            #                                                             original_sequence_lengths)
+        dropout = tf.layers.dropout(flat, rate = 0.5 * tf.cast(is_training, tf.float32))
+        hidden1 = tf.contrib.layers.fully_connected(dropout, 100, activation_fn=tf.nn.relu)
+        hidden2 = tf.contrib.layers.fully_connected(hidden1, 50, activation_fn=tf.nn.relu)
+        logits = tf.contrib.layers.fully_connected(hidden2, 1, activation_fn=None)
+        logits = tf.reshape(logits, [-1, num_class])
+        masked_logits = tf.multiply(logits, mask_ph)
+        probs = tf.nn.softmax(masked_logits)
 
         # Training ops.
-        loss = tf.nn.softmax_cross_entropy_with_logits_v2(labels=lbl_ph, logits=logits)
+        loss = tf.nn.softmax_cross_entropy_with_logits_v2(labels=lbl_ph, logits=masked_logits)
         optimizer = tf.train.AdamOptimizer(self._config.learning_rate)
         train_op = optimizer.minimize(loss)
 
         # add entry points
-
+        self._seq_ph = seq_ph
+        self._lbl_ph = lbl_ph
+        self._mask_ph = mask_ph
+        self._is_training = is_training
         self._probs = probs
         self._train_op = train_op
         self._loss = tf.reduce_sum(loss)
@@ -183,9 +178,12 @@ class FlipDetector(Agent):
         batch_size = self._config.batch_size
         offset = batch_num * batch_size
         if not validation:
-            return dataset.train_lbl[offset:offset + batch_size]
+            lbls = dataset.train_lbl[offset:offset + batch_size]
         else:
-            return dataset.val_lbl[offset:offset + batch_size]
+            lbls = dataset.val_lbl[offset:offset + batch_size]
+        lbls_onehot = np.zeros(lbls.shape)
+        lbls_onehot[np.arange(batch_size), np.argmax(lbls, axis=1)] = 1
+        return  lbls,lbls_onehot
 
     def _validate(self, dataset):
         batch_size = self._config.batch_size
@@ -198,12 +196,17 @@ class FlipDetector(Agent):
         p_bar.set_description('validation evaluation')
         for batch_num in p_bar:
             seq = self._get_seq_batch(dataset, batch_num, validation=True)
-            lbls = self._get_lbls_batch(dataset, batch_num, validation=True)
-            lbls_onehot = np.zeros(lbls.shape)
-            lbls_onehot[np.arange(batch_size), np.argmax(lbls, axis=1)] = 1
-            feed_dict = {self._seq_ph: seq, self._lbl_ph: lbls_onehot, self._is_training: False}
+            lbls, lbls_one_hot = self._get_lbls_batch(dataset, batch_num, validation=True)
+            if self._config.mask_logits:
+                mask = (seq != 0)
+            else:
+                mask = np.ones_like(seq, dtype=np.float32)
+            # evaluate
+            feed_dict = {self._seq_ph: seq, self._lbl_ph: lbls_one_hot, self._is_training: False, self._mask_ph: mask }
             fetches = {'loss': self._loss, 'probs': self._probs}
             result = sess.run(fetches, feed_dict)
+
+            # metrics:
             val_loss += result['loss']
             correct_pred += np.sum(np.argmax(lbls, axis=1) == np.argmax(result['probs'], axis=1))
             top_5_label_args = np.argsort(lbls , axis=1)
@@ -251,10 +254,12 @@ class FlipDetector(Agent):
             p_bar = tqdm.tqdm(range(num_batches))
             for b in p_bar:
                 seq = self._get_seq_batch(dataset, b) #TODO i think the dataset is not suffled.
-                lbls = self._get_lbls_batch(dataset, b)
-                lbls_onehot = np.zeros(lbls.shape)
-                lbls_onehot[np.arange(batch_size), np.argmax(lbls, axis=1)] =1
-                feed_dict = {self._seq_ph: seq, self._lbl_ph: lbls_onehot, self._is_training: True}
+                lbls, lbls_onehot = self._get_lbls_batch(dataset, b)
+                if self._config.mask_logits:
+                    mask = (seq != 0)
+                else:
+                    mask = np.ones_like(seq, dtype=np.float32)
+                feed_dict = {self._seq_ph: seq, self._lbl_ph: lbls_onehot, self._is_training: True, self._mask_ph: mask}
                 fetches = {'train_op': self._train_op,
                            'loss': self._loss,
                            'probs': self._probs,
@@ -276,8 +281,8 @@ class FlipDetector(Agent):
     def attack(self, seq, target_confidence):
         if len(seq.shape) == 1:
             seq = np.expand_dims(seq, 0)
-        feed_dict = {self._seq_ph: seq}
-
+        mask = np.ones_like(seq, dtype=np.float32)
+        feed_dict = {self._seq_ph: seq, self._mask_ph: mask}
         result = self._probs.eval(session=self._sess, feed_dict=feed_dict)
         return np.argmax(result, 1)
 
@@ -286,7 +291,7 @@ def example():
     dataset = HotFlipDataProcessor.get_detector_datasets()
     _, char_idx, _ = data.Dataset.init_embedding_from_dump()
     sess = tf.Session()
-    config = FlipDetectorConfig(eval_only=False)
+    config = FlipDetectorConfig(restore=True)
     model = FlipDetector(sess, config=config)
     # model._validate(dataset)
     model.train(dataset)
