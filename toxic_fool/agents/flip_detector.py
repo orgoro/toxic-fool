@@ -284,7 +284,7 @@ class FlipDetector(Agent):
         mask = np.ones_like(seq, dtype=np.float32)
         feed_dict = {self._seq_ph: seq, self._mask_ph: mask}
         result = self._probs.eval(session=self._sess, feed_dict=feed_dict)
-        return np.argmax(result, 1)
+        return np.argmax(result, 1) , result
 
 
 def example():
@@ -297,7 +297,7 @@ def example():
     model.train(dataset)
 
     seq = dataset.train_seq[0]
-    flip_idx = model.attack(seq, target_confidence=0.)[0]
+    flip_idx , _ = model.attack(seq, target_confidence=0.)[0]
 
     sent = data.seq_2_sent(seq, char_idx)
     flipped_sent = sent[:flip_idx] + '[*]' + sent[min(flip_idx + 1, len(sent)):]
