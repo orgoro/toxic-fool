@@ -28,9 +28,10 @@ class HotFlipAttackData(object):
 
 
 class HotFlipAttack(object):
-    def __init__(self, model, num_of_seq_to_attack= None):
+    def __init__(self, model, num_of_seq_to_attack= None, debug=True):
         self.model = model
         self.num_of_seq_to_attack = num_of_seq_to_attack
+        self.debug=debug
 
     def create_data(self, hot_flip_status ,sentence_ind):
         curr_flip_status = hot_flip_status
@@ -72,7 +73,7 @@ class HotFlipAttack(object):
 
     def attack(self,data_seq,labels):
 
-        hot_flip = HotFlip(model=self.model)
+        hot_flip = HotFlip(model=self.model, debug=self.debug)
 
         # init list
         list_of_hot_flip_attack = []
@@ -104,11 +105,12 @@ class HotFlipAttack(object):
 
 
             # print sentance after the flips
-            print("setence num: ", counter ,"flipped sentence: ")
-            print(data.seq_2_sent(best_hot_flip_status.fliped_sent, char_to_token_dic))
+            if self.debug:
+                print("setence num: ", counter ,"flipped sentence: ")
+                print(data.seq_2_sent(best_hot_flip_status.fliped_sent, char_to_token_dic))
 
-            dur = time.time() - t
-            print("dur is: ", dur)
+                dur = time.time() - t
+                print("dur is: ", dur)
 
 
         return list_of_hot_flip_attack

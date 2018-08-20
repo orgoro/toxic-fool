@@ -107,7 +107,8 @@ class ToxClassifierKerasConfig(object):
                  use_gpu=tf.test.is_gpu_available(),
                  train_labels_1_ratio=data.Dataset.init_embedding_from_dump()[2],
                  run_name='',
-                 train_on_toxic_only=False):
+                 train_on_toxic_only=False,
+                 debug=True):
         self.restore = restore
         self.restore_path = restore_path
         self.checkpoint = checkpoint
@@ -116,7 +117,7 @@ class ToxClassifierKerasConfig(object):
         self.train_labels_1_ratio = train_labels_1_ratio
         self.run_name = run_name
         self.train_on_toxic_only = train_on_toxic_only
-
+        self.debug = debug
 
 class ToxicityClassifierKeras(ToxicityClassifier):
     # pylint: disable = too-many-arguments
@@ -131,6 +132,7 @@ class ToxicityClassifierKeras(ToxicityClassifier):
         self._atten_w = None
         self._metrics = ['accuracy', 'ce', calc_precision, calc_recall, calc_f1]
         self.grad_fn = None
+
         super(ToxicityClassifierKeras, self).__init__(session=session, max_seq=max_seq)
 
     def embedding_layer(self, tensor):
@@ -238,7 +240,8 @@ class ToxicityClassifierKeras(ToxicityClassifier):
             optimizer=adam_optimizer,
             metrics=self._metrics)
 
-        model.summary()
+        if self._config.debug:
+            model.summary()
         return model
 
     def _define_callbacks(self):
