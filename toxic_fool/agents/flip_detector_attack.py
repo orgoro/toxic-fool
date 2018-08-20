@@ -20,7 +20,7 @@ from agents.agent import Agent, AgentConfig
 from data.hot_flip_data_processor import HotFlipDataProcessor
 from resources import LATEST_DETECTOR_WEIGHTS
 from attacks.hot_flip_attack import HotFlipAttackData  ##needed to load hot flip data
-from agents.flip_detector import *
+from agents.flip_detector import FlipDetector, FlipDetectorConfig
 from agents.smart_replace import smart_replace
 
 def get_callsifier(model,seq):
@@ -64,7 +64,7 @@ def example():
         #for i in range(3):
         mask_char_allow_to_flip = np.ones([400])
         num_of_flips_done = 0
-        while(curr_class > 0.5 and num_of_flips_done < 15):
+        while curr_class > 0.5 and num_of_flips_done < 15:
             _ , probs = model.attack(flipped_seq, target_confidence=0.)
             mask_probs = probs * mask_char_allow_to_flip
             flip_idx = np.argmax(mask_probs, 1)[0]

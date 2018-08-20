@@ -121,7 +121,7 @@ class HotFlip(object):
                     # TODO do generic.
                     # TODO maybe allow to replace ' ' .
                     # TODO maybe replace to other english char
-                    if (curr_char == 0 or curr_char == 95): continue
+                    if curr_char == 0 or curr_char == 95: continue
                     flip_grad_matrix[i] = char_grad_tox[i][curr_char] - char_grad_tox[i]
                     max_flip_grad_per_char[i] = np.max(flip_grad_matrix[i])
 
