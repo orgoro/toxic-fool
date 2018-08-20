@@ -3,12 +3,16 @@ from __future__ import division
 from __future__ import print_function
 
 from attacks.hot_flip_attack import HotFlipAttack  ##needed to load hot flip data
-from agents.flip_detector import FlipDetector
+from agents.flip_detector import FlipDetector, FlipDetectorConfig
 from agents.smart_replace import smart_replace
 from models import ToxicityClassifierKeras
 from models import ToxClassifierKerasConfig
 from agents.agent import AgentConfig
 import random
+import data
+import tensorflow as tf
+import numpy as np
+
 
 
 def create_token_dict(char_idx):
@@ -26,6 +30,8 @@ class RandomFlip(object):
         masked_seq = seq * mask
         spaces_indices = np.where(seq == 95)
         masked_seq[spaces_indices] = 0
+        if not masked_seq.any():
+            return 0,0,0,seq
         char_idx_to_flip = random.choice(np.where(masked_seq != 0)[0])
         char_token_to_flip = seq[char_idx_to_flip]
         char_to_flip = token_index[char_token_to_flip]
@@ -78,12 +84,12 @@ class Attacker(object):
         self.char_index = char_index
         self.token_index = create_token_dict(char_index)
 
-    def attack(self, model='random', seq=None, labels=None, mask=None, sequence_idx=0):
+    def attack(self, model='random', seq=None, labels=None, mask=[], sequence_idx=0):
         assert model in ['random', 'hotflip', 'detector']
         assert seq is not None
         seq = seq.copy()
         curr_seq = seq[sequence_idx]
-        if not mask.all():
+        if len(mask) == 0:
             mask = np.ones_like(curr_seq)
         sent = data.seq_2_sent(curr_seq, self.char_index)
         tox_before = self._tox_model.classify(np.expand_dims(curr_seq, 0))[0][0]
@@ -128,6 +134,9 @@ class Attacker(object):
                                                         labels=labels,
                                                         mask=mask,
                                                         sequence_idx=sequence_idx)
+            if np.array_equal(seq[sequence_idx],flipped_seq):
+                print ("Replaced all chars and couldn't change sentence to non toxic")
+                break
             seq[sequence_idx] = flipped_seq
             mask[flip_idx] = 0
         if self.config.debug:
