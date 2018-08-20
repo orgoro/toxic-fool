@@ -1,4 +1,4 @@
-tensorflow
+tensorflow-gpu
 sklearn
 git-lfs
 pylint

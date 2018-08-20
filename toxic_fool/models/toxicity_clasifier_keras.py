@@ -107,7 +107,8 @@ class ToxClassifierKerasConfig(object):
                  use_gpu=tf.test.is_gpu_available(),
                  train_labels_1_ratio=data.Dataset.init_embedding_from_dump()[2],
                  run_name='',
-                 train_on_toxic_only=False):
+                 train_on_toxic_only=False,
+                 debug=True):
         self.restore = restore
         self.restore_path = restore_path
         self.checkpoint = checkpoint
@@ -116,7 +117,7 @@ class ToxClassifierKerasConfig(object):
         self.train_labels_1_ratio = train_labels_1_ratio
         self.run_name = run_name
         self.train_on_toxic_only = train_on_toxic_only
-
+        self.debug = debug
 
 class ToxicityClassifierKeras(ToxicityClassifier):
     # pylint: disable = too-many-arguments
@@ -131,6 +132,7 @@ class ToxicityClassifierKeras(ToxicityClassifier):
         self._atten_w = None
         self._metrics = ['accuracy', 'ce', calc_precision, calc_recall, calc_f1]
         self.grad_fn = None
+
         super(ToxicityClassifierKeras, self).__init__(session=session, max_seq=max_seq)
 
     def embedding_layer(self, tensor):
@@ -238,7 +240,8 @@ class ToxicityClassifierKeras(ToxicityClassifier):
             optimizer=adam_optimizer,
             metrics=self._metrics)
 
-        model.summary()
+        if self._config.debug:
+            model.summary()
         return model
 
     def _define_callbacks(self):
@@ -338,7 +341,7 @@ def _visualise_attention(sent, attention):
 def restore_model():
     config = ToxClassifierKerasConfig(restore=True)
     sess = tf.Session()
-    embedding_matrix, _ = data.Dataset.init_embedding_from_dump()
+    embedding_matrix, _ , _ = data.Dataset.init_embedding_from_dump()
     max_seq = 400
     tox_model = ToxicityClassifierKeras(session=sess, embedding_matrix=embedding_matrix, max_seq=max_seq, config=config)
     return tox_model
@@ -346,14 +349,15 @@ def restore_model():
 
 def example():
     # init
-    restore = True
+    restore = False
     embedding_matrix, char_idx, _ = data.Dataset.init_embedding_from_dump()
+
+    max_seq = 400
 
     if restore:
         tox_model = restore_model()
     else:
         sess = tf.Session()
-        max_seq = 400
         config = ToxClassifierKerasConfig(restore=False)
         tox_model = ToxicityClassifierKeras(session=sess,
                                             max_seq=max_seq,

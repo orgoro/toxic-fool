@@ -25,11 +25,12 @@ class FlipStatus(object):
         self.prev_flip_status = prev_flip_status
 
 class HotFlip(object):
-    def __init__(self, model , num_of_char_to_flip = 7, beam_search_size = 2, attack_threshold = 0.15):
+    def __init__(self, model , num_of_char_to_flip = 7, beam_search_size = 2, attack_threshold = 0.15,debug=True):
         self.tox_model = model
         self.num_of_char_to_flip = num_of_char_to_flip
         self.beam_search_size = beam_search_size
         self.attack_threshold = attack_threshold
+        self.debug = debug
 
     #get min score in the beam search
     def get_min_score_in_beam(self, beam_best_flip):
@@ -81,7 +82,8 @@ class HotFlip(object):
         squeeze_seq = seq.squeeze(0)
 
         # print sentence before the flip
-        print( data.seq_2_sent(squeeze_seq, char_to_token_dic) )
+        if self.debug:
+            print( data.seq_2_sent(squeeze_seq, char_to_token_dic) )
 
         # copy the sentence to the output sentence
         curr_squeeze_seq = squeeze_seq.copy()
@@ -95,7 +97,8 @@ class HotFlip(object):
             # get best flip from beam
             best_hot_flip_status = self.get_best_hot_flip(beam_best_flip)
             curr_class = self.tox_model.classify(np.expand_dims(best_hot_flip_status.fliped_sent, 0))[0][0]
-            print("curr class: ", curr_class)
+            if self.debug:
+                print("curr class: ", curr_class)
             if curr_class < self.attack_threshold:
                 break
 
@@ -118,7 +121,7 @@ class HotFlip(object):
                     # TODO do generic.
                     # TODO maybe allow to replace ' ' .
                     # TODO maybe replace to other english char
-                    if (curr_char == 0 or curr_char == 95): continue
+                    if curr_char == 0 or curr_char == 95: continue
                     flip_grad_matrix[i] = char_grad_tox[i][curr_char] - char_grad_tox[i]
                     max_flip_grad_per_char[i] = np.max(flip_grad_matrix[i])
 
