@@ -49,7 +49,7 @@ def example():
 
     index_of_toxic_sent = np.where(dataset.val_lbl[:, 0] == 1)[0]
     tox_model = ToxicityClassifierKeras(session=sess)
-    num_of_sentence_to_attack = 30 #TODO
+    num_of_sentence_to_attack = 100 #TODO
     for j in range(num_of_sentence_to_attack):
         seq = dataset.val_seq[index_of_toxic_sent[j]]
         sent = data.seq_2_sent(seq, char_idx)
