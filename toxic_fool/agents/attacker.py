@@ -84,6 +84,7 @@ class Attacker(object):
         self.char_index = char_index
         self.token_index = create_token_dict(char_index)
 
+    # pylint: disable=dangerous-default-value
     def attack(self, model='random', seq=None, labels=None, mask=[], sequence_idx=0):
         assert model in ['random', 'hotflip', 'detector']
         assert seq is not None
