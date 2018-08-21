@@ -12,6 +12,8 @@ import random
 import data
 import tensorflow as tf
 import numpy as np
+from resources_out import RES_OUT_DIR
+from os import path
 
 
 
@@ -97,7 +99,7 @@ class Attacker(object):
         if self.config.debug:
             print("Attacking with model: ", model)
             print("Toxicity before attack: ", tox_before)
-        print(sent)
+            print(sent)
         if model == 'random':
             _, _, flip_idx, res = self._random_flip.attack(curr_seq, mask, self.token_index, self.char_index)
         elif model == 'hotflip':
@@ -106,9 +108,13 @@ class Attacker(object):
             res = res[0][0].fliped_sent
         else:
             _, probs = self._flip_detector.attack(curr_seq, target_confidence=0.)
+            spaces_indices = np.where(curr_seq == 95)
+            mask[spaces_indices] = 0
             mask_probs = probs * mask
             flip_idx = np.argmax(mask_probs, 1)[0]
             token_to_flip = curr_seq[flip_idx]
+            if not mask.any():
+                return 0,0,0,curr_seq
             char_to_flip = self.token_index[token_to_flip]
             char_to_flip_to = smart_replace(char_to_flip)
             token_of_flip = self.char_index[char_to_flip_to]
@@ -118,7 +124,7 @@ class Attacker(object):
         tox_after = self._tox_model.classify(np.expand_dims(res, 0))[0][0]
         if self.config.debug:
             print("Toxicity after attack: ", tox_after)
-        print(flipped_sent)
+            print(flipped_sent)
         return tox_before, tox_after, flip_idx, res
 
     def attack_until_break(self, model='random', seq=None, labels=None, mask=None, sequence_idx=0):
@@ -126,8 +132,14 @@ class Attacker(object):
         curr_seq = seq[sequence_idx]
         tox = self._tox_model.classify(np.expand_dims(curr_seq, 0))[0][0]
         cnt = 0
+        curr_seq_copy = curr_seq.copy()
+        curr_seq_space_indices = np.where(curr_seq_copy == 95)
+        curr_seq_copy[curr_seq_space_indices] = 0
+        curr_seq_replacable_chars = np.sum(np.where(curr_seq_copy != 0))
         if not mask:
+            non_letters = np.where(curr_seq == 0)
             mask = np.ones_like(curr_seq)
+            mask[non_letters] = 0
         while tox > 0.5:
             cnt += 1
             _, tox, flip_idx, flipped_seq = self.attack(model=model,
@@ -135,8 +147,8 @@ class Attacker(object):
                                                         labels=labels,
                                                         mask=mask,
                                                         sequence_idx=sequence_idx)
-            if np.array_equal(seq[sequence_idx],flipped_seq):
-                print ("Replaced all chars and couldn't change sentence to non toxic")
+            if np.array_equal(seq[sequence_idx],flipped_seq) or cnt == curr_seq_replacable_chars - 1:
+                print ("Replaced all chars and couldn't change sentence to non toxic with model ", model)
                 break
             seq[sequence_idx] = flipped_seq
             mask[flip_idx] = 0
@@ -149,7 +161,7 @@ class Attacker(object):
 def example():
     dataset = data.Dataset.init_from_dump()
     sess = tf.Session()
-    attacker_config = AttackerConfig(debug=True)
+    attacker_config = AttackerConfig(debug=False)
     attacker = Attacker(session=sess, config=attacker_config)
 
     index_of_toxic_sent = np.where(dataset.val_lbl[:, 0] == 1)[0]
@@ -159,12 +171,36 @@ def example():
 
     seq, label, _ = attack_list[0]
 
-    attacker.attack(seq=seq, model='random', labels=label)
-    attacker.attack(seq=seq, model='hotflip', labels=label)
-    attacker.attack(seq=seq, model='detector', labels=label)
-    attacker.attack_until_break(model='detector', seq=seq, labels=label, sequence_idx=10)
-    attacker.attack_until_break(model='random', seq=seq, labels=label, sequence_idx=10)
+    # attacker.attack(seq=seq, model='random', labels=label)
+    # attacker.attack(seq=seq, model='hotflip', labels=label)
+    # attacker.attack(seq=seq, model='detector', labels=label)
+    random_cnt_list = list()
+    hotflip_cnt_list = list()
+    detector_cnt_list = list()
 
+    for j in range(100):
+        print ("Working on sentence ", j)
+        curr_seq = seq[j]
+        if attacker._tox_model.classify(np.expand_dims(curr_seq, 0))[0][0] < 0.5:
+            continue
+        _, random_cnt = attacker.attack_until_break(model='random', seq=seq, labels=label, sequence_idx=j)
+        random_cnt_list.append(random_cnt)
+        _, hotflip_cnt = attacker.attack_until_break(model='hotflip', seq=seq, labels=label, sequence_idx=j)
+        hotflip_cnt_list.append(hotflip_cnt)
+        _, detector_cnt = attacker.attack_until_break(model='detector', seq=seq, labels=label, sequence_idx=j)
+        detector_cnt_list.append(detector_cnt)
+        print ("Random Cnt: ", random_cnt)
+        print ("Hotflip Cnt: ", hotflip_cnt)
+        print ("Detector Cnt: ", detector_cnt)
+
+    print ("Random mean: ", np.mean(random_cnt_list))
+    print ("Hotflip mean: ", np.mean(hotflip_cnt_list))
+    print ("Detector mean: ", np.mean(detector_cnt_list))
+    flips_cnt = dict()
+    flips_cnt['random'] = random_cnt_list
+    flips_cnt['hotflip'] = hotflip_cnt_list
+    flips_cnt['detector'] = detector_cnt_list
+    np.save(path.join(RES_OUT_DIR, 'flips_cnt.npy'), flips_cnt )
 
 if __name__ == '__main__':
     example()

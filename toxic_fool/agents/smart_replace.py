@@ -33,8 +33,9 @@ def _replace_char(is_upper, row_idx, char_idx):
         if char_idx > 0:
             pos_chars += cur_rows[r][char_idx - 1]
         if r != row_idx:
-            pos_chars += cur_rows[r][char_idx]
-        if char_idx < row_len:
+            if char_idx < row_len:
+                pos_chars += cur_rows[r][char_idx]
+        if char_idx < row_len-1:
             pos_chars += cur_rows[r][char_idx + 1]
 
     selected_char = np.random.randint(0, len(pos_chars))
