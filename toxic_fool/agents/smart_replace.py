@@ -3,6 +3,7 @@ from __future__ import division
 from __future__ import print_function
 
 import numpy as np
+import re
 
 ROW_0 = '`1234567890-='
 ROW_1 = 'qwertyuiop[]\\'
@@ -18,7 +19,7 @@ ROWS = [ROW_0, ROW_1, ROW_2, ROW_3]
 ROW_U = [ROW_0_U, ROW_1_U, ROW_2_U, ROW_3_U]
 
 
-def _replace_char(is_upper, row_idx, char_idx):
+def _get_char_neighbors(is_upper, row_idx, char_idx):
     if is_upper:
         cur_rows = ROW_U
     else:
@@ -30,19 +31,18 @@ def _replace_char(is_upper, row_idx, char_idx):
     pos_chars = ''
     for r in range(min_row, max_row + 1):
         row_len = len(cur_rows[r])
-        if char_idx > 0:
+        if 0 < char_idx < row_len:
             pos_chars += cur_rows[r][char_idx - 1]
         if r != row_idx:
-            if char_idx < row_len:
+            if char_idx < row_len - 1:
                 pos_chars += cur_rows[r][char_idx]
-        if char_idx < row_len-1:
+        if char_idx < row_len - 2:
             pos_chars += cur_rows[r][char_idx + 1]
 
-    selected_char = np.random.randint(0, len(pos_chars))
-    return pos_chars[selected_char]
+    return pos_chars
 
 
-def _find_char(char):
+def _find_char(char,):
     in_row_0 = ROW_0.find(char)
     in_row_1 = ROW_1.find(char)
     in_row_2 = ROW_2.find(char)
@@ -82,10 +82,17 @@ def _find_char(char):
     return is_upper, row_idx, char_idx
 
 
-def smart_replace(char):
+def smart_replace(char, preserve_type=True):
+    #type: (str, bool) -> str
     is_upper, row_idx, char_idx = _find_char(char)
-    replacement = _replace_char(is_upper, row_idx, char_idx)
-    return replacement
+    neighbours = _get_char_neighbors(is_upper, row_idx, char_idx)
+    if preserve_type:
+        if char.isalpha():
+            neighbours = re.sub(r'[^a-zA-Z]','', neighbours)
+        else:
+            neighbours = re.sub(r'[a-zA-Z]','', neighbours)
+    selected_char = np.random.randint(0, len(neighbours))
+    return neighbours[selected_char]
 
 
 def example():
