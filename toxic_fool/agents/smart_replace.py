@@ -41,13 +41,6 @@ def _get_char_neighbors(is_upper, row_idx, char_idx):
 
     return pos_chars
 
-def _replace_char(is_upper, row_idx, char_idx):
-
-    pos_chars = _get_char_neighbors(is_upper, row_idx, char_idx)
-
-    selected_char = np.random.randint(0, len(pos_chars))
-    return pos_chars[selected_char]
-
 
 def _find_char(char,):
     in_row_0 = ROW_0.find(char)
@@ -88,19 +81,19 @@ def _find_char(char,):
 
     return is_upper, row_idx, char_idx
 
-def get_possible_replace(char):
-    is_upper, row_idx, char_idx = _find_char(char)
-    return _get_char_neighbors(is_upper, row_idx, char_idx)
-
-def smart_replace(char, preserve_type=True):
-    #type: (str, bool) -> str
+def get_possible_replace(char,preserve_type=True):
     is_upper, row_idx, char_idx = _find_char(char)
     neighbours = _get_char_neighbors(is_upper, row_idx, char_idx)
     if preserve_type:
         if char.isalpha():
-            neighbours = re.sub(r'[^a-zA-Z]','', neighbours)
+            neighbours = re.sub(r'[^a-zA-Z]', '', neighbours)
         else:
-            neighbours = re.sub(r'[a-zA-Z]','', neighbours)
+            neighbours = re.sub(r'[a-zA-Z]', '', neighbours)
+    return neighbours
+
+def smart_replace(char, preserve_type=True):
+    #type: (str, bool) -> str
+    neighbours = get_possible_replace(char,preserve_type)
     selected_char = np.random.randint(0, len(neighbours))
     return neighbours[selected_char]
 
