@@ -15,6 +15,8 @@ import numpy as np
 from resources_out import RES_OUT_DIR
 from os import path
 
+SPACE_EMBEDDING = 95
+MAX_SEQ = 400
 
 
 def create_token_dict(char_idx):
@@ -99,7 +101,7 @@ class Attacker(object):
         if self.config.debug:
             print("Attacking with model: ", model)
             print("Toxicity before attack: ", tox_before)
-            print(sent)
+            # print(sent)
         if model == 'random':
             _, _, flip_idx, res = self._random_flip.attack(curr_seq, mask, self.token_index, self.char_index)
         elif model == 'hotflip':
@@ -127,11 +129,41 @@ class Attacker(object):
             print(flipped_sent)
         return tox_before, tox_after, flip_idx, res
 
-    def attack_until_break(self, model='random', seq=None, labels=None, mask=None, sequence_idx=0):
+    def remove_word_from_mask(self, flipped_seq, mask, flip_idx):
+        seq_start = flipped_seq[:flip_idx]
+        seq_end   = flipped_seq[flip_idx+1:]
+        reversed_seq_start = seq_start[::-1]
+        if SPACE_EMBEDDING in seq_end:
+            space_fw_offset = np.where(seq_end == SPACE_EMBEDDING)[0][0]
+        else:
+            space_fw_offset = len(seq_end)
+        if SPACE_EMBEDDING in reversed_seq_start:
+            space_bw_offset = np.where(reversed_seq_start == SPACE_EMBEDDING)[0][0]
+        else:
+            space_bw_offset = len(np.where(reversed_seq_start != 0))-1
+        word_start = flip_idx - space_bw_offset - 1
+        word_end =  flip_idx + space_fw_offset + 1
+        mask[word_start:word_end] = 0
+        return mask
+
+    def remove_first_and_last_word_letters(self,flipped_seq,mask):
+        space_indices = np.where(flipped_seq == SPACE_EMBEDDING)
+        space_indices_plus = np.add(space_indices, 1)
+        space_indices_minus = np.subtract(space_indices, 1)
+        first_char = np.min(np.where(flipped_seq != 0))
+        mask[space_indices_plus] = 0
+        mask[space_indices_minus] = 0
+        mask[first_char] = 0
+        mask[MAX_SEQ-1] = 0
+        return mask
+
+
+    def attack_until_break(self, model='random', seq=None, labels=None, mask=None, sequence_idx=0, pretty_replace=False):
         seq = seq.copy()
         curr_seq = seq[sequence_idx]
         tox = self._tox_model.classify(np.expand_dims(curr_seq, 0))[0][0]
         cnt = 0
+        cant_untoxic = 0
         curr_seq_copy = curr_seq.copy()
         curr_seq_space_indices = np.where(curr_seq_copy == 95)
         curr_seq_copy[curr_seq_space_indices] = 0
@@ -140,6 +172,8 @@ class Attacker(object):
             non_letters = np.where(curr_seq == 0)
             mask = np.ones_like(curr_seq)
             mask[non_letters] = 0
+        if pretty_replace:
+            mask = self.remove_first_and_last_word_letters(curr_seq, mask)
         while tox > 0.5:
             cnt += 1
             _, tox, flip_idx, flipped_seq = self.attack(model=model,
@@ -149,19 +183,23 @@ class Attacker(object):
                                                         sequence_idx=sequence_idx)
             if np.array_equal(seq[sequence_idx],flipped_seq) or cnt == curr_seq_replacable_chars - 1:
                 print ("Replaced all chars and couldn't change sentence to non toxic with model ", model)
+                cant_untoxic = 1
                 break
+            if pretty_replace:
+                mask = self.remove_word_from_mask(flipped_seq, mask, flip_idx)
+                mask = self.remove_first_and_last_word_letters(flipped_seq,mask)
             seq[sequence_idx] = flipped_seq
             mask[flip_idx] = 0
         if self.config.debug:
             print("Toxicity after break: ", tox)
             print("Number of flips needed: ", cnt)
-        return tox, cnt
+        return tox, cnt, cant_untoxic
 
 
 def example():
     dataset = data.Dataset.init_from_dump()
     sess = tf.Session()
-    attacker_config = AttackerConfig(debug=False)
+    attacker_config = AttackerConfig(debug=True)
     attacker = Attacker(session=sess, config=attacker_config)
 
     index_of_toxic_sent = np.where(dataset.val_lbl[:, 0] == 1)[0]
@@ -177,25 +215,31 @@ def example():
     random_cnt_list = list()
     hotflip_cnt_list = list()
     detector_cnt_list = list()
-
+    detector_cant_untoxic_cnt = 0
+    random_cant_untoxic_cnt = 0
     for j in range(100):
         print ("Working on sentence ", j)
         curr_seq = seq[j]
+        # attacker.remove_word_from_mask(curr_seq,np.ones_like(curr_seq),277)
         if attacker._tox_model.classify(np.expand_dims(curr_seq, 0))[0][0] < 0.5:
             continue
-        _, random_cnt = attacker.attack_until_break(model='random', seq=seq, labels=label, sequence_idx=j)
+        _, random_cnt, random_cant_untoxic = attacker.attack_until_break(model='random', seq=seq, labels=label, sequence_idx=j, pretty_replace=True)
         random_cnt_list.append(random_cnt)
-        _, hotflip_cnt = attacker.attack_until_break(model='hotflip', seq=seq, labels=label, sequence_idx=j)
+        _, hotflip_cnt,_ = attacker.attack_until_break(model='hotflip', seq=seq, labels=label, sequence_idx=j, pretty_replace=True)
         hotflip_cnt_list.append(hotflip_cnt)
-        _, detector_cnt = attacker.attack_until_break(model='detector', seq=seq, labels=label, sequence_idx=j)
+        _, detector_cnt, detector_cant_untoxic = attacker.attack_until_break(model='detector', seq=seq, labels=label, sequence_idx=j, pretty_replace=True)
         detector_cnt_list.append(detector_cnt)
+        detector_cant_untoxic_cnt += detector_cant_untoxic
+        random_cant_untoxic_cnt += random_cant_untoxic
         print ("Random Cnt: ", random_cnt)
         print ("Hotflip Cnt: ", hotflip_cnt)
         print ("Detector Cnt: ", detector_cnt)
 
     print ("Random mean: ", np.mean(random_cnt_list))
+    print("Num of sentences cant untoxic random: ", str(random_cant_untoxic_cnt))
     print ("Hotflip mean: ", np.mean(hotflip_cnt_list))
     print ("Detector mean: ", np.mean(detector_cnt_list))
+    print("Num of sentences cant untoxic detector: ", str(detector_cant_untoxic_cnt))
     flips_cnt = dict()
     flips_cnt['random'] = random_cnt_list
     flips_cnt['hotflip'] = hotflip_cnt_list
