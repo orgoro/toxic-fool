@@ -18,7 +18,7 @@ ROWS = [ROW_0, ROW_1, ROW_2, ROW_3]
 ROW_U = [ROW_0_U, ROW_1_U, ROW_2_U, ROW_3_U]
 
 
-def _replace_char(is_upper, row_idx, char_idx):
+def possible_char(is_upper, row_idx, char_idx):
     if is_upper:
         cur_rows = ROW_U
     else:
@@ -37,6 +37,12 @@ def _replace_char(is_upper, row_idx, char_idx):
                 pos_chars += cur_rows[r][char_idx]
         if char_idx < row_len-1:
             pos_chars += cur_rows[r][char_idx + 1]
+
+    return pos_chars
+
+def _replace_char(is_upper, row_idx, char_idx):
+
+    pos_chars = possible_char(is_upper, row_idx, char_idx)
 
     selected_char = np.random.randint(0, len(pos_chars))
     return pos_chars[selected_char]
@@ -81,6 +87,9 @@ def _find_char(char):
 
     return is_upper, row_idx, char_idx
 
+def get_possible_replace(char):
+    is_upper, row_idx, char_idx = _find_char(char)
+    return possible_char(is_upper, row_idx, char_idx)
 
 def smart_replace(char):
     is_upper, row_idx, char_idx = _find_char(char)
