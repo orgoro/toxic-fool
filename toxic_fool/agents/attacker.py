@@ -101,7 +101,7 @@ class Attacker(object):
         if self.config.debug:
             print("Attacking with model: ", model)
             print("Toxicity before attack: ", tox_before)
-            # print(sent)
+            print(sent)
         if model == 'random':
             _, _, flip_idx, res = self._random_flip.attack(curr_seq, mask, self.token_index, self.char_index)
         elif model == 'hotflip':
@@ -158,7 +158,13 @@ class Attacker(object):
         return mask
 
 
-    def attack_until_break(self, model='random', seq=None, labels=None, mask=None, sequence_idx=0, pretty_replace=False):
+    def attack_until_break(self,
+                           model='random',
+                           seq=None,
+                           labels=None,
+                           mask=None,
+                           sequence_idx=0,
+                           pretty_replace=False):
         seq = seq.copy()
         curr_seq = seq[sequence_idx]
         tox = self._tox_model.classify(np.expand_dims(curr_seq, 0))[0][0]
@@ -223,11 +229,23 @@ def example():
         # attacker.remove_word_from_mask(curr_seq,np.ones_like(curr_seq),277)
         if attacker._tox_model.classify(np.expand_dims(curr_seq, 0))[0][0] < 0.5:
             continue
-        _, random_cnt, random_cant_untoxic = attacker.attack_until_break(model='random', seq=seq, labels=label, sequence_idx=j, pretty_replace=True)
+        _, random_cnt, random_cant_untoxic = attacker.attack_until_break(model='random',
+                                                                         seq=seq,
+                                                                         labels=label,
+                                                                         sequence_idx=j,
+                                                                         pretty_replace=True)
         random_cnt_list.append(random_cnt)
-        _, hotflip_cnt,_ = attacker.attack_until_break(model='hotflip', seq=seq, labels=label, sequence_idx=j, pretty_replace=True)
+        _, hotflip_cnt,_ = attacker.attack_until_break(model=
+                                                       'hotflip',
+                                                       seq=seq,
+                                                       labels=label,
+                                                       sequence_idx=j)
         hotflip_cnt_list.append(hotflip_cnt)
-        _, detector_cnt, detector_cant_untoxic = attacker.attack_until_break(model='detector', seq=seq, labels=label, sequence_idx=j, pretty_replace=True)
+        _, detector_cnt, detector_cant_untoxic = attacker.attack_until_break(model='detector',
+                                                                             seq=seq,
+                                                                             labels=label,
+                                                                             sequence_idx=j,
+                                                                             pretty_replace=True)
         detector_cnt_list.append(detector_cnt)
         detector_cant_untoxic_cnt += detector_cant_untoxic
         random_cant_untoxic_cnt += random_cant_untoxic
