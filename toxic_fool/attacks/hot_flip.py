@@ -7,7 +7,16 @@ import data
 import numpy as np
 import tensorflow as tf
 from models.toxicity_clasifier_keras import ToxicityClassifierKeras
+from agents.smart_replace import smart_replace , get_possible_replace
 
+
+def create_token_dict(char_idx):
+    # convert the char to token dic into token to char dic
+    token_index = {}
+    for key, value in char_idx.items():
+        token_index[value] = key
+
+    return token_index
 
 
 class FlipStatus(object):
@@ -25,12 +34,14 @@ class FlipStatus(object):
         self.prev_flip_status = prev_flip_status
 
 class HotFlip(object):
-    def __init__(self, model , num_of_char_to_flip = 7, beam_search_size = 2, attack_threshold = 0.15,debug=True):
+    def __init__(self, model , num_of_char_to_flip = 7, beam_search_size = 2, attack_threshold = 0.15,debug=True,
+                 only_smart_replace_allowed = False):
         self.tox_model = model
         self.num_of_char_to_flip = num_of_char_to_flip
         self.beam_search_size = beam_search_size
         self.attack_threshold = attack_threshold
         self.debug = debug
+        self.only_smart_replace_allowed = only_smart_replace_allowed
 
     #get min score in the beam search
     def get_min_score_in_beam(self, beam_best_flip):
@@ -78,6 +89,8 @@ class HotFlip(object):
         #get embedding and token dict
         embedding_matrix, char_to_token_dic , _ = data.Dataset.init_embedding_from_dump()
 
+        token_index = create_token_dict(char_to_token_dic)
+
         # squeeze the seq to vector
         squeeze_seq = seq.squeeze(0)
 
@@ -113,16 +126,25 @@ class HotFlip(object):
                 char_grad_tox = self.get_char_grad_from_seq(tox_model, embedding_matrix, curr_squeeze_seq)
 
                 #calc all relevant grads
-                flip_grad_matrix = np.full((tox_model._max_seq,96), -np.inf)
+                flip_grad_matrix = np.full((tox_model._max_seq,tox_model._num_tokens), -np.inf)
                 max_flip_grad_per_char = np.full((tox_model._max_seq),    -np.inf)
                 for i in range(tox_model._max_seq):
-                    curr_char = curr_squeeze_seq[i]
-                    # 0 is special token for nothing , 95 is ' '
-                    # TODO do generic.
-                    # TODO maybe allow to replace ' ' .
-                    # TODO maybe replace to other english char
-                    if curr_char == 0 or curr_char == 95: continue
-                    flip_grad_matrix[i] = char_grad_tox[i][curr_char] - char_grad_tox[i]
+                    curr_token = curr_squeeze_seq[i]
+
+                    # 0 is special token for nothing , 95 is ' '. # TODO do generic.
+                    if curr_token == 0 or curr_token == 95: continue
+
+                    #if only smart replace allowed, grads in other position will be -np.inf
+                    grad_curr_token = char_grad_tox[i][curr_token]
+                    if self.only_smart_replace_allowed:
+                        mask = np.zeros([tox_model._num_tokens])
+                        curr_char = token_index[curr_token]
+                        pos_flip= get_possible_replace(curr_char)
+                        token_pos_flip=[char_to_token_dic[word] for word in pos_flip]
+                        mask[token_pos_flip] = 1
+                        char_grad_tox[i][np.where(mask == 0)] = np.inf
+
+                    flip_grad_matrix[i] = grad_curr_token - char_grad_tox[i]
                     max_flip_grad_per_char[i] = np.max(flip_grad_matrix[i])
 
 
@@ -171,7 +193,6 @@ class HotFlip(object):
 
 
 def example():
-    # TODO decide which class to attack
 
     # get restore model
     sess = tf.Session()
