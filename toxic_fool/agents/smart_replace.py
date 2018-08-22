@@ -94,6 +94,7 @@ def get_possible_replace(char,preserve_type=True):
 def smart_replace(char, preserve_type=True):
     #type: (str, bool) -> str
     neighbours = get_possible_replace(char,preserve_type)
+    np.random.seed(42)
     selected_char = np.random.randint(0, len(neighbours))
     return neighbours[selected_char]
 
