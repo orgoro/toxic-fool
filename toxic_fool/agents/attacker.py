@@ -2,9 +2,9 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from attacks.hot_flip_attack import HotFlipAttack  ##needed to load hot flip data
+from attacks.hot_flip import HotFlip  ##needed to load hot flip data
 from agents.flip_detector import FlipDetector, FlipDetectorConfig
-from agents.smart_replace import smart_replace
+from agents.smart_replace import smart_replace , get_possible_replace
 from models import ToxicityClassifierKeras
 from models import ToxClassifierKerasConfig
 from agents.agent import AgentConfig
@@ -79,8 +79,10 @@ class Attacker(object):
         else:
             tox_config = ToxClassifierKerasConfig(debug=False)
             self._tox_model = ToxicityClassifierKeras(self._sess, config=tox_config)
-        self._hotflip = hotflip if hotflip else HotFlipAttack(model=self._tox_model, num_of_seq_to_attack=1,
-                                                              debug=False)
+            self._hotflip = hotflip if hotflip else HotFlip(model=self._tox_model, num_of_char_to_flip = 1,
+                                                              beam_search_size = 1, only_smart_replace_allowed = True ,
+                                                              debug= False)
+
         self._random_flip = random_flip if random_flip else RandomFlip()
         self.config = config
         self.dataset = data.Dataset.init_from_dump()
@@ -89,7 +91,7 @@ class Attacker(object):
         self.token_index = create_token_dict(char_index)
 
     # pylint: disable=dangerous-default-value
-    def attack(self, model='random', seq=None, labels=None, mask=[], sequence_idx=0):
+    def attack(self, model='random', seq=None, mask=[], sequence_idx=0):
         assert model in ['random', 'hotflip', 'detector']
         assert seq is not None
         seq = seq.copy()
@@ -105,9 +107,10 @@ class Attacker(object):
         if model == 'random':
             _, _, flip_idx, res = self._random_flip.attack(curr_seq, mask, self.token_index, self.char_index)
         elif model == 'hotflip':
-            res = self._hotflip.attack(seq[sequence_idx:], labels)
-            flip_idx = res[0][0].char_to_flip_to
-            res = res[0][0].fliped_sent
+
+            res =    self._hotflip.attack(np.expand_dims(curr_seq, 0))
+            flip_idx = res[0].char_to_flip_to
+            res = res[0].fliped_sent
         else:
             _, probs = self._flip_detector.attack(curr_seq, target_confidence=0.)
             spaces_indices = np.where(curr_seq == 95)
@@ -173,7 +176,7 @@ class Attacker(object):
         curr_seq_copy = curr_seq.copy()
         curr_seq_space_indices = np.where(curr_seq_copy == 95)
         curr_seq_copy[curr_seq_space_indices] = 0
-        curr_seq_replacable_chars = np.sum(np.where(curr_seq_copy != 0))
+        curr_seq_replacable_chars = np.sum(curr_seq_copy != 0)
         if not mask:
             non_letters = np.where(curr_seq == 0)
             mask = np.ones_like(curr_seq)
@@ -184,7 +187,6 @@ class Attacker(object):
             cnt += 1
             _, tox, flip_idx, flipped_seq = self.attack(model=model,
                                                         seq=seq,
-                                                        labels=labels,
                                                         mask=mask,
                                                         sequence_idx=sequence_idx)
             if np.array_equal(seq[sequence_idx],flipped_seq) or cnt == curr_seq_replacable_chars - 1:
@@ -205,7 +207,7 @@ class Attacker(object):
 def example():
     dataset = data.Dataset.init_from_dump()
     sess = tf.Session()
-    attacker_config = AttackerConfig(debug=True)
+    attacker_config = AttackerConfig(debug=False)
     attacker = Attacker(session=sess, config=attacker_config)
 
     index_of_toxic_sent = np.where(dataset.val_lbl[:, 0] == 1)[0]
@@ -213,7 +215,7 @@ def example():
     attack_list = []
     attack_list.append((dataset.val_seq[index_of_toxic_sent], dataset.val_lbl[index_of_toxic_sent], 'val'))
 
-    seq, label, _ = attack_list[0]
+    seq, _, _ = attack_list[0]
 
     # attacker.attack(seq=seq, model='random', labels=label)
     # attacker.attack(seq=seq, model='hotflip', labels=label)
@@ -226,24 +228,20 @@ def example():
     for j in range(100):
         print ("Working on sentence ", j)
         curr_seq = seq[j]
-        # attacker.remove_word_from_mask(curr_seq,np.ones_like(curr_seq),277)
         if attacker._tox_model.classify(np.expand_dims(curr_seq, 0))[0][0] < 0.5:
             continue
         _, random_cnt, random_cant_untoxic = attacker.attack_until_break(model='random',
                                                                          seq=seq,
-                                                                         labels=label,
                                                                          sequence_idx=j,
                                                                          pretty_replace=True)
         random_cnt_list.append(random_cnt)
         _, hotflip_cnt,_ = attacker.attack_until_break(model=
                                                        'hotflip',
                                                        seq=seq,
-                                                       labels=label,
                                                        sequence_idx=j)
         hotflip_cnt_list.append(hotflip_cnt)
         _, detector_cnt, detector_cant_untoxic = attacker.attack_until_break(model='detector',
                                                                              seq=seq,
-                                                                             labels=label,
                                                                              sequence_idx=j,
                                                                              pretty_replace=True)
         detector_cnt_list.append(detector_cnt)
