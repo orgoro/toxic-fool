@@ -82,7 +82,9 @@ class HotFlip(object):
 
         return char_grad_tox
 
-    def attack(self,seq):
+    def attack(self,seq, mask = None):
+
+
 
         tox_model = self.tox_model
 
@@ -93,6 +95,9 @@ class HotFlip(object):
 
         # squeeze the seq to vector
         squeeze_seq = seq.squeeze(0)
+
+        if mask.all() == None:
+            mask = np.ones_like(squeeze_seq)
 
         # print sentence before the flip
         if self.debug:
@@ -128,7 +133,10 @@ class HotFlip(object):
                 #calc all relevant grads
                 flip_grad_matrix = np.full((tox_model._max_seq,tox_model._num_tokens), -np.inf)
                 max_flip_grad_per_char = np.full((tox_model._max_seq),    -np.inf)
-                for i in range(tox_model._max_seq):
+
+                index_of_char_allowed_to_flip = np.argwhere( mask == 1).squeeze(1)
+                for i in index_of_char_allowed_to_flip:
+
                     curr_token = curr_squeeze_seq[i]
 
                     # 0 is special token for nothing , 95 is ' '. # TODO do generic.
