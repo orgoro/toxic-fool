@@ -127,7 +127,7 @@ class Attacker(object):
                                                            make_smart_replace=self.config.smart_replace)
         elif model == 'hotflip':
 
-            res =    self._hotflip.attack(np.expand_dims(curr_seq, 0))
+            res =    self._hotflip.attack(np.expand_dims(curr_seq, 0),mask)
             flip_idx = res[0].char_to_flip_to
             res = res[0].fliped_sent
         else:
