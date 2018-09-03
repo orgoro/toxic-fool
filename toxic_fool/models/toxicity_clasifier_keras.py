@@ -302,6 +302,10 @@ class ToxicityClassifierKeras(ToxicityClassifier):
         fn = K.function(inputs=[self._model.input], outputs=[self._atten_w])
         return fn([seq])[0]
 
+    def get_attention_fn(self):
+        fn = K.function(inputs=[self._model.input], outputs=[self._atten_w])
+        return fn
+
 
 def _visualize(history):
     # type: (keras.callbacks.History) -> None
@@ -349,7 +353,7 @@ def restore_model():
 
 def example():
     # init
-    restore = False
+    restore = True
     embedding_matrix, char_idx, _ = data.Dataset.init_embedding_from_dump()
 
     max_seq = 400
