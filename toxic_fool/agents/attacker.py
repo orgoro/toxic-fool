@@ -14,6 +14,7 @@ import tensorflow as tf
 import numpy as np
 from resources_out import RES_OUT_DIR
 from os import path
+import time
 
 SPACE_EMBEDDING = 95
 MAX_SEQ = 400
@@ -104,10 +105,12 @@ class Attacker(object):
         _, char_index, _ = data.Dataset.init_embedding_from_dump()
         self.char_index = char_index
         self.token_index = create_token_dict(char_index)
+        self.atten_fn = self._tox_model.get_attention_fn()
+        self.attack_list = list()
 
     # pylint: disable=dangerous-default-value
-    def attack(self, model='random', seq=None, mask=[], sequence_idx=0):
-        assert model in ['random', 'hotflip', 'detector']
+    def attack(self, model='random', seq=None, mask=[], sequence_idx=0,attack_number=0):
+        assert model in ['random', 'hotflip', 'detector','atten']
         assert seq is not None
         seq = seq.copy()
         curr_seq = seq[sequence_idx]
@@ -119,26 +122,47 @@ class Attacker(object):
             print("Attacking with model: ", model)
             print("Toxicity before attack: ", tox_before)
             print(sent)
+        time_before = time.time()
         if model == 'random':
             _, _, flip_idx, res = self._random_flip.attack(curr_seq,
                                                            mask,
                                                            self.token_index,
                                                            self.char_index,
                                                            make_smart_replace=self.config.smart_replace)
+            time_for_attack = time.time() - time_before
         elif model == 'hotflip':
-
-            res =    self._hotflip.attack(np.expand_dims(curr_seq, 0),mask)
+            res = self._hotflip.attack(np.expand_dims(curr_seq, 0),mask)
+            time_for_attack = time.time() - time_before
             flip_idx = res[0].char_to_flip_to
             res = res[0].fliped_sent
+        elif model == 'atten':
+            # atten_probs = np.zeros_like(curr_seq)
+            spaces_indices = np.where(curr_seq == SPACE_EMBEDDING)
+            mask[spaces_indices] = 0
+            atten_probs = self.atten_fn([np.expand_dims(curr_seq,0)])[0]
+            time_for_attack = time.time() - time_before
+            atten_probs = np.squeeze(atten_probs)
+            atten_probs_masked = atten_probs * mask
+            flip_idx = np.argsort(atten_probs_masked)[-1]
+            token_to_flip = curr_seq[flip_idx]
+            char_to_flip = self.token_index[token_to_flip]
+            if not atten_probs_masked.any():
+                res = curr_seq
+            else:
+                char_to_flip_to = smart_replace(char_to_flip)
+                token_of_flip = self.char_index[char_to_flip_to]
+                curr_seq[flip_idx] = token_of_flip
+                res = curr_seq
         else:
             _, probs = self._flip_detector.attack(curr_seq, target_confidence=0.)
+            time_for_attack = time.time() - time_before
             spaces_indices = np.where(curr_seq == SPACE_EMBEDDING)
             mask[spaces_indices] = 0
             mask_probs = probs * mask
             flip_idx = np.argmax(mask_probs, 1)[0]
             token_to_flip = curr_seq[flip_idx]
             if not mask.any():
-                return 0,0,0,curr_seq
+                return 0,0,0,curr_seq,time_for_attack
             char_to_flip = self.token_index[token_to_flip]
             if self.config.smart_replace:
                 char_to_flip_to = smart_replace(char_to_flip)
@@ -154,7 +178,19 @@ class Attacker(object):
         if self.config.debug:
             print("Toxicity after attack: ", tox_after)
             print(flipped_sent)
-        return tox_before, tox_after, flip_idx, res
+        single_attack = dict()
+        single_attack['seq_idx'] = sequence_idx
+        single_attack['seq_length'] = np.count_nonzero(curr_seq)
+        single_attack['attack_model'] = model
+        single_attack['time_for_attack'] = time_for_attack
+        single_attack['tox_before'] = tox_before
+        single_attack['tox_after'] = tox_after
+        single_attack['attack_number'] = attack_number
+        single_attack['smart_replace'] = self.config.smart_replace
+        single_attack['flip_once_in_a_word'] = self.config.flip_once_in_a_word
+        single_attack['flip_middle_letters_only'] = self.config.flip_middle_letters_only
+        self.attack_list.append(single_attack.copy())
+        return tox_before, tox_after, flip_idx, res, time_for_attack
 
     def remove_word_from_mask(self, flipped_seq, mask, flip_idx):
         seq_start = flipped_seq[:flip_idx]
@@ -174,10 +210,13 @@ class Attacker(object):
         return mask
 
     def remove_first_and_last_word_letters(self,flipped_seq,mask):
-        space_indices = np.where(flipped_seq == SPACE_EMBEDDING)
+        space_indices = np.where(flipped_seq == SPACE_EMBEDDING)[0]
         space_indices_plus = np.add(space_indices, 1)
         space_indices_minus = np.subtract(space_indices, 1)
         first_char = np.min(np.where(flipped_seq != 0))
+        if MAX_SEQ-1 in space_indices:
+            last_space_index = np.where(space_indices_plus == MAX_SEQ)
+            space_indices_plus = np.delete(space_indices_plus, last_space_index)
         mask[space_indices_plus] = 0
         mask[space_indices_minus] = 0
         mask[first_char] = 0
@@ -199,6 +238,7 @@ class Attacker(object):
         curr_seq_space_indices = np.where(curr_seq_copy == SPACE_EMBEDDING)
         curr_seq_copy[curr_seq_space_indices] = 0
         curr_seq_replacable_chars = np.sum(curr_seq_copy != 0)
+        time_for_attack_list = list()
         if not mask:
             non_letters = np.where(curr_seq == 0)
             mask = np.ones_like(curr_seq)
@@ -207,10 +247,12 @@ class Attacker(object):
             mask = self.remove_first_and_last_word_letters(curr_seq, mask)
         while tox > 0.5:
             cnt += 1
-            _, tox, flip_idx, flipped_seq = self.attack(model=model,
-                                                        seq=seq,
-                                                        mask=mask,
-                                                        sequence_idx=sequence_idx)
+            _, tox, flip_idx, flipped_seq, time_for_attack = self.attack(model=model,
+                                                             seq=seq,
+                                                             mask=mask,
+                                                             sequence_idx=sequence_idx,
+                                                             attack_number=cnt)
+            time_for_attack_list.append(time_for_attack)
             if np.array_equal(seq[sequence_idx],flipped_seq) or cnt == curr_seq_replacable_chars - 1:
                 print ("Replaced all chars and couldn't change sentence to non toxic with model ", model)
                 cant_untoxic = 1
@@ -224,16 +266,16 @@ class Attacker(object):
         if self.config.debug:
             print("Toxicity after break: ", tox)
             print("Number of flips needed: ", cnt)
-        return tox, cnt, cant_untoxic
+        return cnt, cant_untoxic, time_for_attack_list
 
 
 def example():
     dataset = data.Dataset.init_from_dump()
     sess = tf.Session()
-    attacker_config = AttackerConfig(debug=True,
+    attacker_config = AttackerConfig(debug=False,
                                      flip_once_in_a_word=False,
-                                     flip_middle_letters_only=True,
-                                     smart_replace=False)
+                                     flip_middle_letters_only=False,
+                                     smart_replace=True)
     attacker = Attacker(session=sess, config=attacker_config)
 
     index_of_toxic_sent = np.where(dataset.val_lbl[:, 0] == 1)[0]
@@ -246,45 +288,137 @@ def example():
     # attacker.attack(seq=seq, model='random', labels=label)
     # attacker.attack(seq=seq, model='hotflip', labels=label)
     # attacker.attack(seq=seq, model='detector', labels=label)
-    random_cnt_list = list()
-    hotflip_cnt_list = list()
-    detector_cnt_list = list()
+    random_cnt_list_moderate = list()
+    hotflip_cnt_list_moderate = list()
+    detector_cnt_list_moderate = list()
+    atten_cnt_list_moderate = list()
+    random_cnt_list_hard = list()
+    hotflip_cnt_list_hard = list()
+    detector_cnt_list_hard = list()
+    atten_cnt_list_hard = list()
+    hotflip_cnt_list_no_smart = list()
     detector_cant_untoxic_cnt = 0
     random_cant_untoxic_cnt = 0
-    for j in range(100):
+    atten_cant_untoxic_cnt = 0
+    random_time_for_attack_list = list()
+    atten_time_for_attack_list = list()
+    detector_time_for_attack_list = list()
+    hotflip_time_for_attack_list = list()
+    sentences_to_run = range(len(seq))
+    for j in range(len(sentences_to_run)):
         print ("Working on sentence ", j)
-        curr_seq = seq[j]
+        curr_seq = seq[sentences_to_run[j]]
         if attacker._tox_model.classify(np.expand_dims(curr_seq, 0))[0][0] < 0.5:
             continue
-        _, random_cnt, random_cant_untoxic = attacker.attack_until_break(model='random',
+        ## Attack all models with moderate attack
+        attacker.config.smart_replace = True
+        attacker.config.flip_middle_letters_only = False
+        attacker.config.flip_once_in_a_word = False
+
+        random_cnt_moderate, random_cant_untoxic,random_time_for_attack = attacker.attack_until_break(model='random',
                                                                          seq=seq,
-                                                                         sequence_idx=j)
-        random_cnt_list.append(random_cnt)
-        _, hotflip_cnt,_ = attacker.attack_until_break(model=
+                                                                         sequence_idx=sentences_to_run[j])
+        random_cnt_list_moderate.append(random_cnt_moderate)
+        random_time_for_attack_list.append(random_time_for_attack)
+        atten_cnt_moderate, atten_cant_untoxic,atten_time_for_attack = attacker.attack_until_break(model='atten',
+                                                                         seq=seq,
+                                                                         sequence_idx=sentences_to_run[j])
+        atten_cnt_list_moderate.append(atten_cnt_moderate)
+        atten_time_for_attack_list.append(atten_time_for_attack)
+        hotflip_cnt_moderate,_,hotflip_time_for_attack = attacker.attack_until_break(model=
                                                        'hotflip',
                                                        seq=seq,
-                                                       sequence_idx=j)
-        hotflip_cnt_list.append(hotflip_cnt)
-        _, detector_cnt, detector_cant_untoxic = attacker.attack_until_break(model='detector',
+                                                       sequence_idx=sentences_to_run[j])
+        hotflip_cnt_list_moderate.append(hotflip_cnt_moderate)
+        hotflip_time_for_attack_list.append(hotflip_time_for_attack)
+        detector_cnt_moderate, detector_cant_untoxic, detector_time_for_attack = attacker.attack_until_break(model='detector',
                                                                              seq=seq,
-                                                                             sequence_idx=j)
-        detector_cnt_list.append(detector_cnt)
+                                                                             sequence_idx=sentences_to_run[j])
+        detector_cnt_list_moderate.append(detector_cnt_moderate)
+        detector_time_for_attack_list.append(detector_time_for_attack)
+
+        ## Attack with hotflip, no smart
+        attacker.config.smart_replace = False
+
+        hotflip_cnt_no_smart, _, hotflip_time_for_attack = attacker.attack_until_break(model=
+                                                                                 'hotflip',
+                                                                                 seq=seq,
+                                                                                 sequence_idx=sentences_to_run[j])
+        hotflip_cnt_list_no_smart.append(hotflip_cnt_no_smart)
+
+        ## Attack all models, hard restrictions
+        attacker.config.smart_replace = True
+        attacker.config.flip_middle_letters_only = True
+        attacker.config.flip_once_in_a_word = True
+
+        random_cnt_hard, random_cant_untoxic, random_time_for_attack = attacker.attack_until_break(model='random',
+                                                                                                 seq=seq,
+                                                                                                 sequence_idx=
+                                                                                                 sentences_to_run[j])
+        random_cnt_list_hard.append(random_cnt_hard)
+        random_time_for_attack_list.append(random_time_for_attack)
+        atten_cnt_hard, atten_cant_untoxic, atten_time_for_attack = attacker.attack_until_break(model='atten',
+                                                                                              seq=seq,
+                                                                                              sequence_idx=
+                                                                                              sentences_to_run[j])
+        atten_cnt_list_hard.append(atten_cnt_hard)
+        atten_time_for_attack_list.append(atten_time_for_attack)
+        hotflip_cnt_hard, _, hotflip_time_for_attack = attacker.attack_until_break(model=
+                                                                                 'hotflip',
+                                                                                 seq=seq,
+                                                                                 sequence_idx=sentences_to_run[j])
+        hotflip_cnt_list_hard.append(hotflip_cnt_hard)
+        hotflip_time_for_attack_list.append(hotflip_time_for_attack)
+        detector_cnt_hard, detector_cant_untoxic, detector_time_for_attack = attacker.attack_until_break(model='detector',
+                                                                                                       seq=seq,
+                                                                                                       sequence_idx=
+                                                                                                       sentences_to_run[
+                                                                                                           j])
+
+
+        detector_cnt_list_hard.append(detector_cnt_hard)
+        detector_time_for_attack_list.append(detector_time_for_attack)
         detector_cant_untoxic_cnt += detector_cant_untoxic
         random_cant_untoxic_cnt += random_cant_untoxic
-        print ("Random Cnt: ", random_cnt)
-        print ("Hotflip Cnt: ", hotflip_cnt)
-        print ("Detector Cnt: ", detector_cnt)
+        atten_cant_untoxic_cnt += atten_cant_untoxic
+        print ("Random Cnt moderate: ", random_cnt_moderate)
+        print ("Attention Cnt  moderate: ", atten_cnt_moderate)
+        print ("Hotflip Cnt  moderate: ", hotflip_cnt_moderate)
+        print ("Detector Cnt  moderate: ", detector_cnt_moderate)
+        print("Random Cnt hard: ", random_cnt_hard)
+        print("Attention Cnt  hard: ", atten_cnt_hard)
+        print("Hotflip Cnt  hard: ", hotflip_cnt_hard)
+        print("Detector Cnt  hard: ", detector_cnt_hard)
+        print("Hotflip no smart Cnt: ", hotflip_cnt_no_smart)
+        if j%100 == 99:
+            np.save(path.join(RES_OUT_DIR, 'attack_dict.npy'), attacker.attack_list)
 
-    print ("Random mean: ", np.mean(random_cnt_list))
+    print ("Random mean moderate: ", np.mean(random_cnt_list_moderate))
+    print("Random mean hard: ", np.mean(random_cnt_list_hard))
     print("Num of sentences cant untoxic random: ", str(random_cant_untoxic_cnt))
-    print ("Hotflip mean: ", np.mean(hotflip_cnt_list))
-    print ("Detector mean: ", np.mean(detector_cnt_list))
+    print("Attention mean moderate: ", np.mean(atten_cnt_list_moderate))
+    print("Attention mean hard: ", np.mean(atten_cnt_list_hard))
+    print("Num of sentences cant untoxic attention: ", str(atten_cant_untoxic_cnt))
+    print ("Hotflip mean moderate: ", np.mean(hotflip_cnt_list_moderate))
+    print ("Hotflip mean hard: ", np.mean(hotflip_cnt_list_hard))
+    print ("Hotflip mean no smart: ", np.mean(hotflip_cnt_list_no_smart))
+    print ("Hotflip time for attack: ", np.mean(np.concatenate(hotflip_time_for_attack_list)))
+    print ("Detector mean moderate: ", np.mean(detector_cnt_list_moderate))
+    print ("Detector mean hard: ", np.mean(detector_cnt_list_hard))
     print("Num of sentences cant untoxic detector: ", str(detector_cant_untoxic_cnt))
+    print("Detector time for attack: ", np.mean(np.concatenate(detector_time_for_attack_list)))
     flips_cnt = dict()
-    flips_cnt['random'] = random_cnt_list
-    flips_cnt['hotflip'] = hotflip_cnt_list
-    flips_cnt['detector'] = detector_cnt_list
-    np.save(path.join(RES_OUT_DIR, 'flips_cnt.npy'), flips_cnt )
+    flips_cnt['random_moderate'] = random_cnt_list_moderate
+    flips_cnt['hotflip_moderate'] = hotflip_cnt_list_moderate
+    flips_cnt['detector_moderate'] = detector_cnt_list_moderate
+    flips_cnt['atten_moderate'] = atten_cnt_list_moderate
+    flips_cnt['random_hard'] = random_cnt_list_hard
+    flips_cnt['hotflip_hard'] = hotflip_cnt_list_hard
+    flips_cnt['hotflip_no_smart'] = hotflip_cnt_list_no_smart
+    flips_cnt['detector_hard'] = detector_cnt_list_hard
+    flips_cnt['atten_hard'] = atten_cnt_list_hard
+    np.save(path.join(RES_OUT_DIR, 'flips_cnt.npy'), flips_cnt)
+    np.save(path.join(RES_OUT_DIR, 'attack_dict.npy'), attacker.attack_list)
 
 if __name__ == '__main__':
     example()

@@ -10,7 +10,7 @@ ROW_1 = 'qwertyuiop[]\\'
 ROW_2 = 'asdfghjkl;\''
 ROW_3 = 'zxcvbnm,./'
 
-ROW_0_U = '`!@#$%^&*()'
+ROW_0_U = '~!@#$%^&*()_+'
 ROW_1_U = 'QWERTYUIOP{}|'
 ROW_2_U = 'ASDFGHJKL:"'
 ROW_3_U = 'ZXCVBNM<>?'
