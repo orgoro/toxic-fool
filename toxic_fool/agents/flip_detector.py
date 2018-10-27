@@ -218,6 +218,7 @@ class FlipDetector(Agent):
         batch_size = self._config.batch_size
         offset = batch_num * batch_size
         dataset = dataset
+        # pylint: disable=unused-variable
 
         if not validation:
             replace_chars = np.ones(shape=(batch_size, self._config.embedding_shape[0]))
