@@ -17,7 +17,7 @@ from os import path
 import time
 
 SPACE_EMBEDDING = 95
-MAX_SEQ = 400
+MAX_SEQ = 500
 
 
 def create_token_dict(char_idx):

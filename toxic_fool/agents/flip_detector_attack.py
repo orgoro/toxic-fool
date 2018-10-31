@@ -62,7 +62,7 @@ def example():
 
         #token_to_flip = char_idx['^']
         #for i in range(3):
-        mask_char_allow_to_flip = np.ones([400])
+        mask_char_allow_to_flip = np.ones([500])
         num_of_flips_done = 0
         while curr_class > 0.5 and num_of_flips_done < 15:
             _ , probs = model.attack(flipped_seq, target_confidence=0.)

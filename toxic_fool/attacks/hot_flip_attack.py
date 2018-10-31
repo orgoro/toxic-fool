@@ -21,7 +21,7 @@ class HotFlipAttackData(object):
         self.orig_sent = hot_flip_status.orig_sent
         self.index_of_char_to_flip = hot_flip_status.index_of_char_to_flip
         self.fliped_sent = hot_flip_status.fliped_sent
-        self.max_flip_grad_per_char = hot_flip_status.max_flip_grad_per_char
+        #self.max_flip_grad_per_char = hot_flip_status.max_flip_grad_per_char
         self.grads_in_fliped_char = hot_flip_status.grads_in_fliped_char
         self.char_to_flip_to = hot_flip_status.char_to_flip_to
         self.sentence_ind = sentence_ind
