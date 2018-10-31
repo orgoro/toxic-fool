@@ -30,7 +30,7 @@ class FlipStatus(object):
         self.char_to_flip_to = char_to_flip_to
         self.orig_sent = orig_sent
         self.grads_in_fliped_char = grads_in_fliped_char
-        #self.max_flip_grad_per_char = max_flip_grad_per_char # i think it shouldn't be in use.
+        self.max_flip_grad_per_char = max_flip_grad_per_char # i think it shouldn't be in use.
         self.prev_flip_status = prev_flip_status
 
 class HotFlip(object):
@@ -132,13 +132,14 @@ class HotFlip(object):
 
                 #calc all relevant grads
                 flip_grad_matrix = np.full((tox_model._max_seq,tox_model._num_tokens), -np.inf)
-                dup_grad_matrix = np.full((tox_model._max_seq), -np.inf)
+
                 max_flip_grad_per_char = np.full((tox_model._max_seq),    -np.inf) #TODO remove if not in use
 
                 index_of_char_allowed_to_flip = np.argwhere( mask == 1).squeeze(1)
 
 
                 # #duplicate grad calc
+                #dup_grad_matrix = np.full((tox_model._max_seq), -np.inf)
                 # for i in range(tox_model._max_seq):
                 #
                 #     curr_index = i
@@ -158,9 +159,11 @@ class HotFlip(object):
                 #         if curr_index + 1 == tox_model._max_seq: #TODO solve, maybe need to pad
                 #             break
                 #
-                #         next_char_token = curr_squeeze_seq[curr_index + 1] if curr_index + 1 < tox_model._max_seq else 95 ##TODO more nice, if we are in the last char use space
+                         # next_char_token = curr_squeeze_seq[curr_index + 1] if curr_index + 1 < tox_model._max_seq \
+                         #     else 95 ##TODO more nice, if we are in the last char use space
                 #         index_of_flip = curr_index + 1
-                #         dup_grad_matrix[i] += char_grad_tox[index_of_flip][next_char_token] - char_grad_tox[index_of_flip][curr_token]
+                #          dup_grad_matrix[i] += \
+                #              char_grad_tox[index_of_flip][next_char_token] - char_grad_tox[index_of_flip][curr_token]
                 #
                 #         #TODO assert if reached 500
                 #         curr_index += 1
@@ -288,7 +291,7 @@ def check_length(dataset):
     list_of_length = []
     for i in range(num_of_sen):
         j = 0
-        while(my_dataset[i][j] == 0):
+        while my_dataset[i][j] == 0:
             j = j + 1
         list_of_length.append(sentence_length - j)
 
