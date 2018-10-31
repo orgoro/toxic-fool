@@ -121,7 +121,7 @@ class ToxClassifierKerasConfig(object):
 
 class ToxicityClassifierKeras(ToxicityClassifier):
     # pylint: disable = too-many-arguments
-    def __init__(self, session, max_seq=400, embedding_matrix=data.Dataset.init_embedding_from_dump()[0], config=None):
+    def __init__(self, session, max_seq=500, embedding_matrix=data.Dataset.init_embedding_from_dump()[0], config=None):
         # type: (tf.Session, np.int, np.ndarray, ToxClassifierKerasConfig) -> None
         self._config = config if config else ToxClassifierKerasConfig()
         self._embedding = embedding_matrix
@@ -346,7 +346,7 @@ def restore_model():
     config = ToxClassifierKerasConfig(restore=True)
     sess = tf.Session()
     embedding_matrix, _ , _ = data.Dataset.init_embedding_from_dump()
-    max_seq = 400
+    max_seq = 500
     tox_model = ToxicityClassifierKeras(session=sess, embedding_matrix=embedding_matrix, max_seq=max_seq, config=config)
     return tox_model
 
@@ -356,7 +356,7 @@ def example():
     restore = True
     embedding_matrix, char_idx, _ = data.Dataset.init_embedding_from_dump()
 
-    max_seq = 400
+    max_seq = 500
 
     if restore:
         tox_model = restore_model()

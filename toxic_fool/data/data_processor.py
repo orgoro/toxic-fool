@@ -63,7 +63,8 @@ class DataProcessor(object):
         self._train_d = pd.read_csv(train_d)
         self._test_d = pd.read_csv(test_d)
         # self._test_l = pd.read_csv(test_l)
-        self._max_seq_len = 400
+        self._max_seq_len = 500
+        self._max_data_len = 400
         self._tokenizer = text.Tokenizer(char_level=True, lower=True)  # TODO: max number of words
 
         self.processed = False  # True after data processing
@@ -81,7 +82,9 @@ class DataProcessor(object):
 
 
     @staticmethod
-    def _clean_text(text_seqs,char_list):
+    def _clean_text(text_seqs,char_list,max_data_len):
+
+        text_seqs = text_seqs[:max_data_len]
 
         #replace '\n' (enter) with '. '
         text_seqs = re.sub(r"\n", ". ", text_seqs)
@@ -91,7 +94,7 @@ class DataProcessor(object):
         chars_i_want = set(chars_in_embedding)
         text_seqs = ''.join(c for c in text_seqs if c in chars_i_want)
 
-        return text_seqs
+        return text_seqs + ' ' #i add ' ' at the end for grad calc in case of duplecation of char
 
     @staticmethod
     def get_char_list_and_embedding_index():
@@ -150,8 +153,8 @@ class DataProcessor(object):
         char_list, embedding_index = self.get_char_list_and_embedding_index()
 
         if self._clean_words:
-            text_train = np.asarray([self._clean_text(t,char_list) for t in text_train])
-            text_test = np.asarray([self._clean_text(t,char_list) for t in text_test])
+            text_train = np.asarray([self._clean_text(t,char_list,self._max_data_len) for t in text_train])
+            text_test = np.asarray([self._clean_text(t,char_list,self._max_data_len) for t in text_test])
 
         print('fitting tokenizer...')
 
