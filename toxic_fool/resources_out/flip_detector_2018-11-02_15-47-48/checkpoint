@@ -1,0 +1,6 @@
+model_checkpoint_path: "/home/yotamg/PycharmProjects/toxic-fool/toxic_fool/resources_out/flip_detector_2018-11-02_15-47-48/detector_model.ckpt-21780"
+all_model_checkpoint_paths: "/home/yotamg/PycharmProjects/toxic-fool/toxic_fool/resources_out/flip_detector_2018-11-02_15-47-48/detector_model.ckpt-20900"
+all_model_checkpoint_paths: "/home/yotamg/PycharmProjects/toxic-fool/toxic_fool/resources_out/flip_detector_2018-11-02_15-47-48/detector_model.ckpt-21120"
+all_model_checkpoint_paths: "/home/yotamg/PycharmProjects/toxic-fool/toxic_fool/resources_out/flip_detector_2018-11-02_15-47-48/detector_model.ckpt-21340"
+all_model_checkpoint_paths: "/home/yotamg/PycharmProjects/toxic-fool/toxic_fool/resources_out/flip_detector_2018-11-02_15-47-48/detector_model.ckpt-21560"
+all_model_checkpoint_paths: "/home/yotamg/PycharmProjects/toxic-fool/toxic_fool/resources_out/flip_detector_2018-11-02_15-47-48/detector_model.ckpt-21780"
