@@ -51,7 +51,7 @@ class HotFlipAttack(object):
     def load_attack_from_file(self):
 
         hot_flip_attack_training = []
-        list_of_training_files = glob.glob(path.join(out.RESOURCES_DIR, 'data', '*hot_flip_attack_train.npy'))
+        list_of_training_files = glob.glob(path.join(out.RESOURCES_DIR, 'data', 'split*hot_flip_attack_train.npy'))
         for training_file in  list_of_training_files:
             loaded_file = np.load(training_file)
             for j in range( len(loaded_file) ):

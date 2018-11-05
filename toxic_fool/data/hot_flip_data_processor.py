@@ -104,29 +104,38 @@ class HotFlipDataProcessor(object):
 
         return char_selector_dataset
 
+    @classmethod
+    def get_detector_selector_datasets(self):
+        train_token_input, train_predections_detector, train_predections_char_selector, \
+        val_token_input, val_predections_detector, val_predections_char_selector = self.get_hot_flip_data()
+
+        char_selector_dataset = data.Dataset(train_seq=train_token_input, train_lbl=train_predections_detector, train_replace_lbl=train_predections_char_selector,
+                                             val_seq=val_token_input, val_lbl=val_predections_detector,val_replace_lbl=val_predections_char_selector,
+                                             test_seq=None, test_lbl=None, test_replace_lbl=None)  # TODO test
+
+        return char_selector_dataset
+
 def example():
 
     # get hot flip data
-    detector_dataset = HotFlipDataProcessor.get_detector_datasets()
-    char_selector_dataset = HotFlipDataProcessor.get_char_selector_datasets()
-
+    dataset = HotFlipDataProcessor.get_detector_selector_datasets()
     # get embedding and token dict
     _, char_to_token_dic, _ = data.Dataset.init_embedding_from_dump()
 
     print("input stentence 0: ")
-    print(data.seq_2_sent(detector_dataset.train_seq[0], char_to_token_dic))
+    print(data.seq_2_sent(dataset.train_seq[0], char_to_token_dic))
 
     print("prediction detector: ")
-    print(detector_dataset.train_lbl[0])
+    print(dataset.train_lbl[0])
 
     print("prediction char selector: ")
-    print(char_selector_dataset.train_lbl[0])
+    print(dataset.train_replace_lbl[0])
 
     print("index of the char the should be fliped in the sentence 5")
-    print(np.where(detector_dataset.train_lbl == 1)[1][5])
+    print(np.where(dataset.train_lbl == 1)[1][5])
 
     print("index of the char to flip to in the sentence 5")
-    print(np.where(char_selector_dataset.train_lbl == 1)[1][5])
+    print(np.where(dataset.train_replace_lbl == 1)[1][5])
 
     # for i in range (4):
     #     file_name = 'flip_' + str(i) + '.png'

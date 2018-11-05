@@ -3,6 +3,8 @@ from __future__ import division
 from __future__ import print_function
 
 import os
+os.environ["CUDA_VISIBLE_DEVICES"] = '1'
+
 from os import path
 import time
 from time import gmtime, strftime
@@ -18,6 +20,7 @@ import resources_out as res_out
 from agents.agent import Agent, AgentConfig
 from data.hot_flip_data_processor import HotFlipDataProcessor
 from resources import LATEST_DETECTOR_WEIGHTS
+from resources_out import RES_OUT_DIR
 from attacks.hot_flip_attack import HotFlipAttackData  ##needed to load hot flip data
 
 
@@ -25,7 +28,7 @@ class FlipDetectorConfig(AgentConfig):
     # pylint: disable=too-many-arguments
     def __init__(self,
                  learning_rate=5e-5,
-                 training_epochs=100,
+                 training_epochs=1000,
                  seq_shape=(None, 500),
                  lbls_shape=(None, 500),
                  replace_chars_shape=(None, 96),
@@ -80,6 +83,7 @@ class FlipDetector(Agent):
         self._accuracy = tf.placeholder(name='accuracy', dtype=tf.float32)
         self._accuracy_select = tf.placeholder(name='accuracy', dtype=tf.float32)
         self._top5_accuracy = tf.placeholder(name='top5_accuracy', dtype=tf.float32)
+        self._top5_select_accuracy = tf.placeholder(name='top5_accuracy', dtype=tf.float32)
         self._detect_probs = None
         self._seq_ph = None
         self._lbl_ph = None
@@ -135,7 +139,6 @@ class FlipDetector(Agent):
             select_masked_logits, select_probs = self._select(dropout, num_chars, chars=chars_idx)
             select_loss = tf.nn.softmax_cross_entropy_with_logits_v2(labels=replace_chars_ph,
                                                                      logits=select_masked_logits)
-
         combined_loss = tf.reduce_sum(detect_loss) + tf.reduce_sum(select_loss)
         optimizer = tf.train.AdamOptimizer(self._config.learning_rate)
         train_op = optimizer.minimize(detect_loss + select_loss)
@@ -210,8 +213,7 @@ class FlipDetector(Agent):
             lbls = dataset.train_lbl[offset:offset + batch_size]
         else:
             lbls = dataset.val_lbl[offset:offset + batch_size]
-        lbls_onehot = np.zeros(lbls.shape)
-        lbls_onehot[np.arange(batch_size), np.argmax(lbls, axis=1)] = 1
+        lbls_onehot = lbls #Lables is already one hot
         return lbls, lbls_onehot
 
     def _get_replace_batch(self, dataset, batch_num=None, validation=False):
@@ -221,11 +223,10 @@ class FlipDetector(Agent):
         dataset = dataset
 
         if not validation:
-            replace_chars = np.ones(shape=(batch_size, self._config.embedding_shape[0]))
+            replace_chars_onehot = dataset.train_replace_lbl[offset: offset+batch_size]
         else:
-            replace_chars = np.ones(shape=(batch_size, self._config.embedding_shape[0]))
-        replace_chars_onehot = np.zeros(replace_chars.shape)
-        replace_chars_onehot[np.arange(batch_size), np.argmax(replace_chars, axis=1)] = 1
+            replace_chars_onehot = dataset.val_replace_lbl[offset: offset + batch_size]
+        replace_chars = np.where(replace_chars_onehot==1)[1]
         return replace_chars, replace_chars_onehot
 
     def _validate(self, dataset):
@@ -236,6 +237,7 @@ class FlipDetector(Agent):
         correct_pred = 0
         correct_select_pred = 0
         correct_top_5_pred = 0
+        correct_top_5_select_pred = 0
         p_bar = tqdm.tqdm(range(num_batches))
         p_bar.set_description('validation evaluation')
         for batch_num in p_bar:
@@ -247,21 +249,26 @@ class FlipDetector(Agent):
             # metrics:
             val_loss += result['loss']
             correct_pred += np.sum(np.argmax(lbls, axis=1) == np.argmax(result['probs'], axis=1))
-            correct_select_pred += np.sum(np.argmax(replace_char, axis=1) == np.argmax(result['select_probs'], axis=1))
-            top_5_label_args = np.argsort(lbls, axis=1)
+            correct_select_pred += np.sum(np.argmax(replace_char,axis=1) == np.argmax(result['select_probs'], axis=1))
+            top_5_probs = np.argsort(result['probs'], axis=1)
+            top_5_select_probs = np.argsort(result['select_probs'], axis=1)
             for row in range(0, batch_size - 1):
-                correct_top_5_pred += np.sum(np.argmax(result['probs'][row]) in top_5_label_args[row, -5:])
-        val_loss = val_loss / batch_size
-        accuracy = correct_pred / batch_size
-        accuracy_select = correct_select_pred / batch_size
-        top_5_accuracy = correct_top_5_pred / batch_size
+                correct_top_5_pred += np.sum(np.argmax(lbls[row]) in top_5_probs[row, -5:])
+                correct_top_5_select_pred += np.sum(np.argmax(replace_char[row]) in top_5_select_probs[row, -5:])
+        val_loss = val_loss / (batch_size*num_batches)
+        accuracy = correct_pred / (batch_size*num_batches)
+        accuracy_select = correct_select_pred / (batch_size*num_batches)
+        top_5_accuracy = correct_top_5_pred / (batch_size*num_batches)
+        top_5_select_accuracy = correct_top_5_select_pred / (batch_size*num_batches)
         if self._config.eval_only:
-            print('validation loss: {:5.5} accuracy: {:5.5} accuracy_select: {:5.5} top5 accuracy: {:5.5}'.format(
+            print('validation loss: {:5.5} accuracy: {:5.5} accuracy_select: {:5.5} top5 accuracy: {:5.5}  top5 select accuracy: {:5.5}'.format(
                 val_loss,
                 accuracy,
+                accuracy,
                 accuracy_select,
-                top_5_accuracy))
-        return val_loss, accuracy, top_5_accuracy, accuracy_select
+                top_5_accuracy,
+                top_5_select_accuracy))
+        return val_loss, accuracy, top_5_accuracy, accuracy_select, top_5_select_accuracy
 
     def _get_feed_dict(self, batch_num, dataset, is_validate):
         seq = self._get_seq_batch(dataset, batch_num, validation=is_validate)
@@ -277,7 +284,7 @@ class FlipDetector(Agent):
                      self._replace_chars_ph: replace_chars_one_hot,
                      self._is_training: is_validate,
                      self._mask_ph: mask}
-        return feed_dict, lbls, replace_chars
+        return feed_dict, lbls, replace_chars_one_hot
 
     def train(self, dataset):
         self._config.print()
@@ -296,15 +303,16 @@ class FlipDetector(Agent):
             self.restore(self._config.restore_path)
         for e in range(num_epochs):
             summary_writer = tf.summary.FileWriter(self._save_path, flush_secs=30, graph=sess.graph)
-            val_loss, accuracy, top5_accuracy, accuracy_select = self._validate(dataset)
+            val_loss, accuracy, top5_accuracy, accuracy_select, top5_select_accuracy = self._validate(dataset)
             sum_tb = self._summary_all_op.eval(session=sess, feed_dict={self._val_loss: val_loss,
                                                                         self._accuracy: accuracy,
                                                                         self._accuracy_select: accuracy_select,
-                                                                        self._top5_accuracy: top5_accuracy})
+                                                                        self._top5_accuracy: top5_accuracy,
+                                                                        self._top5_select_accuracy: top5_select_accuracy})
             summary_writer.add_summary(sum_tb, e * num_batches)
             time.sleep(0.3)
-            print('epoch {:2}/{:2} validation loss: {:5.5} acc: {:5.5} top5 acc: {:5.5} acc_select: {:5.5}'.
-                  format(e, num_epochs, val_loss, accuracy, top5_accuracy, accuracy_select))
+            print('epoch {:2}/{:2} validation loss: {:5.5} acc: {:5.5} top5 acc: {:5.5} acc_select: {:5.5},  top 5 acc_select: {:5.5}'.
+                  format(e, num_epochs, val_loss, accuracy, top5_accuracy, accuracy_select, top5_select_accuracy))
             print('saving checkpoint to: ', save_path)
             time.sleep(0.3)
             self._saver.save(sess, save_path, global_step=e * num_batches)
@@ -340,10 +348,10 @@ class FlipDetector(Agent):
 
 
 def example():
-    dataset = HotFlipDataProcessor.get_detector_datasets()
+    dataset = HotFlipDataProcessor.get_detector_selector_datasets()
     _, char_idx, _ = data.Dataset.init_embedding_from_dump()
     sess = tf.Session()
-    config = FlipDetectorConfig(restore=False)
+    config = FlipDetectorConfig(restore=True, restore_path=path.join(RES_OUT_DIR, 'flip_detector_2018-11-02_15-47-48/detector_model.ckpt-21780'))
     model = FlipDetector(sess, config=config)
     # model._validate(dataset)
     model.train(dataset)
