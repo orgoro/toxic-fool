@@ -37,6 +37,7 @@ class FlipStatus(object):
         self.prev_flip_status = prev_flip_status
 
 class HotFlip(object):
+    # pylint: disable=too-many-arguments
     def __init__(self, model , num_of_char_to_flip = 9, beam_search_size = 5, attack_threshold = 0.15,debug=True,
                  only_smart_replace_allowed = False, replace_only_letters_to_letters = True):
         self.tox_model = model
@@ -114,9 +115,6 @@ class HotFlip(object):
                 replace_to_mask[ char_to_token_dic[char] ] = 1
 
             return replace_to_mask
-
-
-        assert(True)
 
 
     def attack(self,seq, mask = None):
