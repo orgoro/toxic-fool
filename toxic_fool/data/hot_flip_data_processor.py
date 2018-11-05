@@ -109,8 +109,11 @@ class HotFlipDataProcessor(object):
         train_token_input, train_predections_detector, train_predections_char_selector, \
         val_token_input, val_predections_detector, val_predections_char_selector = self.get_hot_flip_data()
 
-        char_selector_dataset = data.Dataset(train_seq=train_token_input, train_lbl=train_predections_detector, train_replace_lbl=train_predections_char_selector,
-                                             val_seq=val_token_input, val_lbl=val_predections_detector,val_replace_lbl=val_predections_char_selector,
+        char_selector_dataset = data.Dataset(train_seq=train_token_input,
+                                             train_lbl=train_predections_detector,
+                                             train_replace_lbl=train_predections_char_selector,
+                                             val_seq=val_token_input, val_lbl=val_predections_detector,
+                                             val_replace_lbl=val_predections_char_selector,
                                              test_seq=None, test_lbl=None, test_replace_lbl=None)  # TODO test
 
         return char_selector_dataset

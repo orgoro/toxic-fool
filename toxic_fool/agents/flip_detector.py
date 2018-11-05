@@ -261,9 +261,12 @@ class FlipDetector(Agent):
         top_5_accuracy = correct_top_5_pred / (batch_size*num_batches)
         top_5_select_accuracy = correct_top_5_select_pred / (batch_size*num_batches)
         if self._config.eval_only:
-            print('validation loss: {:5.5} accuracy: {:5.5} accuracy_select: {:5.5} top5 accuracy: {:5.5}  top5 select accuracy: {:5.5}'.format(
+            print(
+                'validation loss: {:5.5} '
+                'accuracy: {:5.5} accuracy_select: {:5.5} '
+                'top5 accuracy: {:5.5}  '
+                'top5 select accuracy: {:5.5}'.format(
                 val_loss,
-                accuracy,
                 accuracy,
                 accuracy_select,
                 top_5_accuracy,
@@ -273,7 +276,7 @@ class FlipDetector(Agent):
     def _get_feed_dict(self, batch_num, dataset, is_validate):
         seq = self._get_seq_batch(dataset, batch_num, validation=is_validate)
         lbls, lbls_one_hot = self._get_lbls_batch(dataset, batch_num, validation=is_validate)
-        replace_chars, replace_chars_one_hot = self._get_replace_batch(dataset, batch_num, validation=is_validate)
+        _, replace_chars_one_hot = self._get_replace_batch(dataset, batch_num, validation=is_validate)
         if self._config.mask_logits:
             mask = (seq != 0)
         else:
@@ -304,14 +307,19 @@ class FlipDetector(Agent):
         for e in range(num_epochs):
             summary_writer = tf.summary.FileWriter(self._save_path, flush_secs=30, graph=sess.graph)
             val_loss, accuracy, top5_accuracy, accuracy_select, top5_select_accuracy = self._validate(dataset)
-            sum_tb = self._summary_all_op.eval(session=sess, feed_dict={self._val_loss: val_loss,
-                                                                        self._accuracy: accuracy,
-                                                                        self._accuracy_select: accuracy_select,
-                                                                        self._top5_accuracy: top5_accuracy,
-                                                                        self._top5_select_accuracy: top5_select_accuracy})
+            sum_tb = self._summary_all_op.eval(
+                session=sess, feed_dict={self._val_loss: val_loss,
+                                         self._accuracy: accuracy,
+                                         self._accuracy_select: accuracy_select,
+                                         self._top5_accuracy: top5_accuracy,
+                                         self._top5_select_accuracy: top5_select_accuracy})
             summary_writer.add_summary(sum_tb, e * num_batches)
             time.sleep(0.3)
-            print('epoch {:2}/{:2} validation loss: {:5.5} acc: {:5.5} top5 acc: {:5.5} acc_select: {:5.5},  top 5 acc_select: {:5.5}'.
+            print('epoch {:2}/{:2} validation loss: {:5.5} '
+                  'acc: {:5.5} '
+                  'top5 acc: {:5.5} '
+                  'acc_select: {:5.5},  '
+                  'top 5 acc_select: {:5.5}'.
                   format(e, num_epochs, val_loss, accuracy, top5_accuracy, accuracy_select, top5_select_accuracy))
             print('saving checkpoint to: ', save_path)
             time.sleep(0.3)
@@ -351,7 +359,9 @@ def example():
     dataset = HotFlipDataProcessor.get_detector_selector_datasets()
     _, char_idx, _ = data.Dataset.init_embedding_from_dump()
     sess = tf.Session()
-    config = FlipDetectorConfig(restore=True, restore_path=path.join(RES_OUT_DIR, 'flip_detector_2018-11-02_15-47-48/detector_model.ckpt-21780'))
+    config = FlipDetectorConfig(
+        restore=True,
+        restore_path=path.join(RES_OUT_DIR, 'flip_detector_2018-11-02_15-47-48/detector_model.ckpt-21780'))
     model = FlipDetector(sess, config=config)
     # model._validate(dataset)
     model.train(dataset)

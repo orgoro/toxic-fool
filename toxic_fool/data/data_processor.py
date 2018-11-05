@@ -26,8 +26,9 @@ TRAIN_LABELS_1_RATIO = 'train_labels_1_ratio.npy'
 
 
 class Dataset(object):
-
-    def __init__(self, train_seq, train_lbl, val_seq, val_lbl, test_seq, test_lbl,train_replace_lbl=None, val_replace_lbl=None, test_replace_lbl=None):
+    # pylint: too-many-arguments
+    def __init__(self, train_seq, train_lbl, val_seq, val_lbl, test_seq, test_lbl,
+                 train_replace_lbl=None, val_replace_lbl=None, test_replace_lbl=None):
         self.train_seq = train_seq
         self.val_seq = val_seq
         self.test_seq = test_seq
