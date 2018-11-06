@@ -9,6 +9,9 @@ import tensorflow as tf
 from models.toxicity_clasifier_keras import ToxicityClassifierKeras
 from agents.smart_replace import smart_replace , get_possible_replace
 
+SMALL_LETTERS = 'qwertyuiopasdfghjklzxcvbnm'
+CAPITAL_LETTERS = 'QWERTYUIOPASDFGHJKLZXCVBNM'
+
 
 def create_token_dict(char_idx):
     # convert the char to token dic into token to char dic
@@ -34,14 +37,16 @@ class FlipStatus(object):
         self.prev_flip_status = prev_flip_status
 
 class HotFlip(object):
+    # pylint: disable=too-many-arguments
     def __init__(self, model , num_of_char_to_flip = 9, beam_search_size = 5, attack_threshold = 0.15,debug=True,
-                 only_smart_replace_allowed = False):
+                 only_smart_replace_allowed = False, replace_only_letters_to_letters = True):
         self.tox_model = model
         self.num_of_char_to_flip = num_of_char_to_flip
         self.beam_search_size = beam_search_size
         self.attack_threshold = attack_threshold
         self.debug = debug
         self.only_smart_replace_allowed = only_smart_replace_allowed
+        self.replace_only_letters_to_letters = replace_only_letters_to_letters
 
     #get min score in the beam search
     def get_min_score_in_beam(self, beam_best_flip):
@@ -82,6 +87,36 @@ class HotFlip(object):
 
         return char_grad_tox
 
+    def unmask_none_latters(self,seq , token_index, mask):
+
+        #convert seq (of char index) to chars
+        list_of_chars = [token_index.get(int(char_index), ' ') for char_index in seq.squeeze(0)]
+
+        #check if chars are letters
+        list_letter_mask = [(CAPITAL_LETTERS.find(char) >= 0 or SMALL_LETTERS.find(char) >= 0)
+                                                                    for char in list_of_chars]
+
+        #muiltiply curr mask with letters mask
+        return np.asarray( [int(is_letter) for is_letter in list_letter_mask] ) & mask
+
+    def get_replace_to_mask(self, char,char_to_token_dic,num_tokens):
+        replace_to_mask = np.zeros([num_tokens])
+        is_capital_letter = CAPITAL_LETTERS.find(char) >= 0
+        is_small_letter = SMALL_LETTERS.find(char) >= 0
+
+        if is_capital_letter:
+            for char in CAPITAL_LETTERS:
+                replace_to_mask[ char_to_token_dic[char] ] = 1
+
+            return replace_to_mask
+
+        if is_small_letter:
+            for char in SMALL_LETTERS:
+                replace_to_mask[ char_to_token_dic[char] ] = 1
+
+            return replace_to_mask
+
+
     def attack(self,seq, mask = None):
 
 
@@ -98,6 +133,9 @@ class HotFlip(object):
 
         if mask == None:
             mask = np.ones_like(squeeze_seq)
+
+        if self.replace_only_letters_to_letters:
+            mask = self.unmask_none_latters(seq ,token_index , mask)
 
         # print sentence before the flip
         if self.debug:
@@ -184,15 +222,20 @@ class HotFlip(object):
                     # 0 is special token for nothing , 95 is ' '. # TODO do generic.
                     if curr_token == 0 or curr_token == 95: continue
 
-                    #if only smart replace allowed, grads in other position will be -np.inf
+                    #if only smart replace allowed, grads in other position will be np.inf
                     grad_curr_token = char_grad_tox[i][curr_token]
                     if self.only_smart_replace_allowed:
-                        mask = np.zeros([tox_model._num_tokens])
+                        replace_to_mask = np.zeros([tox_model._num_tokens])
                         curr_char = token_index[curr_token]
                         pos_flip= get_possible_replace(curr_char)
                         token_pos_flip=[char_to_token_dic[word] for word in pos_flip]
-                        mask[token_pos_flip] = 1
-                        char_grad_tox[i][np.where(mask == 0)] = np.inf
+                        replace_to_mask[token_pos_flip] = 1
+                        char_grad_tox[i][np.where(replace_to_mask == 0)] = np.inf
+
+                    if self.replace_only_letters_to_letters:
+                        curr_char = token_index[curr_token]
+                        replace_to_mask = self.get_replace_to_mask(curr_char,char_to_token_dic,tox_model._num_tokens )
+                        char_grad_tox[i][np.where(replace_to_mask == 0)] = np.inf
 
                     flip_grad_matrix[i] = grad_curr_token - char_grad_tox[i] #TODO check if it shouldn't be the oposite
                     max_flip_grad_per_char[i] = np.max(flip_grad_matrix[i])
