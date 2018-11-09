@@ -2,13 +2,13 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+from os import path
 import data
 import glob
 import numpy as np
 import tensorflow as tf
 from models.toxicity_clasifier_keras import ToxicityClassifierKeras
 from attacks.hot_flip import HotFlip
-from os import path
 import time
 import resources as out
 

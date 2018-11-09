@@ -131,7 +131,7 @@ class HotFlip(object):
         # squeeze the seq to vector
         squeeze_seq = seq.squeeze(0)
 
-        if mask == None:
+        if mask is None:
             mask = np.ones_like(squeeze_seq)
 
         if self.replace_only_letters_to_letters:
