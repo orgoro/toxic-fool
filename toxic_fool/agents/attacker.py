@@ -2,6 +2,8 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import os
+from os import path
 from attacks.hot_flip import HotFlip  ##needed to load hot flip data
 from agents.flip_detector import FlipDetector, FlipDetectorConfig
 from agents.smart_replace import smart_replace, get_possible_replace
@@ -13,7 +15,6 @@ import data
 import tensorflow as tf
 import numpy as np
 from resources_out import RES_OUT_DIR
-from os import path
 import time
 
 SPACE_EMBEDDING = 95
@@ -168,9 +169,10 @@ class Attacker(object):
                 char_to_flip_to = smart_replace(char_to_flip)
                 token_of_flip = self.char_index[char_to_flip_to]
             else:
-                token_of_flip = token_to_flip
-                while token_of_flip == token_to_flip:
-                    token_of_flip = np.random.randint(1, SPACE_EMBEDDING)
+                token_of_flip,_ = self._flip_detector.selector_attack(curr_seq, flip_idx)
+                # token_of_flip = token_to_flip
+                # while token_of_flip == token_to_flip:
+                #     token_of_flip = np.random.randint(1, SPACE_EMBEDDING)
             curr_seq[flip_idx] = token_of_flip
             res = curr_seq
         flipped_sent = data.seq_2_sent(res, self.char_index)
@@ -274,7 +276,7 @@ def example():
     attacker_config = AttackerConfig(debug=False,
                                      flip_once_in_a_word=False,
                                      flip_middle_letters_only=False,
-                                     smart_replace=True)
+                                     smart_replace=False)
     attacker = Attacker(session=sess, config=attacker_config)
 
     index_of_toxic_sent = np.where(dataset.val_lbl[:, 0] == 1)[0]
@@ -310,7 +312,7 @@ def example():
         if attacker._tox_model.classify(np.expand_dims(curr_seq, 0))[0][0] < 0.5:
             continue
         ## Attack all models with moderate attack
-        attacker.config.smart_replace = True
+        # attacker.config.smart_replace = True
         attacker.config.flip_middle_letters_only = False
         attacker.config.flip_once_in_a_word = False
 

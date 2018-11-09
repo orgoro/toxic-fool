@@ -85,6 +85,7 @@ class FlipDetector(Agent):
         self._top5_accuracy = tf.placeholder(name='top5_accuracy', dtype=tf.float32)
         self._top5_select_accuracy = tf.placeholder(name='top5_accuracy', dtype=tf.float32)
         self._detect_probs = None
+        self._select_probs = None
         self._seq_ph = None
         self._lbl_ph = None
         self._replace_chars_ph = None
@@ -105,7 +106,9 @@ class FlipDetector(Agent):
             tf.summary.scalar(name="val_loss", tensor=self._val_loss),
             tf.summary.scalar(name="accuracy", tensor=self._accuracy),
             tf.summary.scalar(name="accuracy_select", tensor=self._accuracy_select),
-            tf.summary.scalar(name="top5_accuracy", tensor=self._top5_accuracy)
+            tf.summary.scalar(name="top5_accuracy", tensor=self._top5_accuracy),
+            tf.summary.scalar(name="top5_accuracy_select", tensor=self._top5_select_accuracy),
+
         ]
 
         )
@@ -351,19 +354,29 @@ class FlipDetector(Agent):
             seq = np.expand_dims(seq, 0)
         mask = np.ones_like(seq, dtype=np.float32)
         feed_dict = {self._seq_ph: seq, self._mask_ph: mask}
-        result = self._detect_probs.eval(session=self._sess, feed_dict=feed_dict)
-        return np.argmax(result, 1), result
+        detect_probs = self._detect_probs.eval(session=self._sess, feed_dict=feed_dict)
+        return np.argmax(detect_probs, 1), detect_probs
 
+    def selector_attack(self,seq, chosen_char_to_flip):
+        flip_char = np.zeros_like(seq)
+        flip_char[chosen_char_to_flip] = 1
+        if len(seq.shape) == 1:
+            seq = np.expand_dims(seq, 0)
+            flip_char = np.expand_dims(flip_char, 0)
+            flip_char = np.repeat(flip_char, 128, axis=0)
+        feed_dict = {self._seq_ph: seq, self._lbl_ph: flip_char}
+        select_probs = self._select_probs.eval(session=self._sess, feed_dict=feed_dict)
+        return np.argmax(select_probs, 1)[0], select_probs[0]
 
 def example():
     dataset = HotFlipDataProcessor.get_detector_selector_datasets()
     _, char_idx, _ = data.Dataset.init_embedding_from_dump()
     sess = tf.Session()
     config = FlipDetectorConfig(
-        restore=True,
+        restore=False,
         restore_path=path.join(RES_OUT_DIR, 'flip_detector_2018-11-02_15-47-48/detector_model.ckpt-21780'))
     model = FlipDetector(sess, config=config)
-    # model._validate(dataset)
+    model._validate(dataset)
     model.train(dataset)
 
     seq = dataset.train_seq[0]

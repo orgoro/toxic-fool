@@ -12,5 +12,5 @@ TEST_CSV_PATH = path.join(RESOURCES_DIR, 'data', 'test.csv')
 TRAIN_CSV_PATH = path.join(RESOURCES_DIR, 'data', 'train.csv')
 
 LATEST_KERAS_WEIGHTS = path.join(RESOURCES_DIR, 'data', 'weights.latest.hdf5')
-LATEST_DETECTOR_WEIGHTS = path.join(RESOURCES_DIR, 'data', 'detector_model.ckpt')
+LATEST_DETECTOR_WEIGHTS = path.join(RESOURCES_DIR, 'data', 'detector_model.ckpt-19584')
 
