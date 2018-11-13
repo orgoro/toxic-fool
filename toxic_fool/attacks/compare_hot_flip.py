@@ -13,7 +13,7 @@ from attacks.hot_flip import HotFlip
 def check_num_of_flips(best_flip_status):
     pointer = best_flip_status
     count = 0
-    while(pointer != None):
+    while pointer != None:
         count += 1
         pointer = pointer.prev_flip_status
 
