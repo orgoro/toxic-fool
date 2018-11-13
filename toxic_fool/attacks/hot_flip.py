@@ -207,7 +207,6 @@ class HotFlip(object):
             curr_min_score_in_beam, index = self.get_min_score_in_beam(beam_best_flip)
 
             if len(beam_best_flip) < self.beam_search_size or curr_score > curr_min_score_in_beam:
-                index_of_char_to_flip = i
 
                 # update beam search database with the new flip
                 dup_squeeze_seq = curr_squeeze_seq.copy()
@@ -255,7 +254,7 @@ class HotFlip(object):
             num_of_replace = 0
 
             #while we didn't reach the end of the word
-            while (curr_squeeze_seq[curr_index] != 95):
+            while curr_squeeze_seq[curr_index] != 95:
 
                 curr_token = curr_squeeze_seq[curr_index]
 
