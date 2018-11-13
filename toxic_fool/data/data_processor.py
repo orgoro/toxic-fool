@@ -26,14 +26,18 @@ TRAIN_LABELS_1_RATIO = 'train_labels_1_ratio.npy'
 
 
 class Dataset(object):
-
-    def __init__(self, train_seq, train_lbl, val_seq, val_lbl, test_seq, test_lbl):
+    # pylint: disable=too-many-arguments
+    def __init__(self, train_seq, train_lbl, val_seq, val_lbl, test_seq, test_lbl,
+                 train_replace_lbl=None, val_replace_lbl=None, test_replace_lbl=None):
         self.train_seq = train_seq
         self.val_seq = val_seq
         self.test_seq = test_seq
         self.train_lbl = train_lbl
         self.val_lbl = val_lbl
         self.test_lbl = test_lbl
+        self.train_replace_lbl = train_replace_lbl
+        self.val_replace_lbl = val_replace_lbl
+        self.test_replace_lbl = test_replace_lbl
 
     @classmethod
     def init_embedding_from_dump(cls):
