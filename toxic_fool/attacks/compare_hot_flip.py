@@ -54,7 +54,7 @@ def main():
         for attack in list_of_attack:
             print("attack mode: " , attack.attack_mode)
             #do hot flip attack
-            best_flip_status , char_to_token_dic = attack.attack(seq = seq)
+            best_flip_status , _ = attack.attack(seq = seq)
 
             # print sentance after the flips
             # print("flipped sentence: ")
