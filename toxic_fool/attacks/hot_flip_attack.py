@@ -12,9 +12,9 @@ from attacks.hot_flip import HotFlip
 import time
 import resources as out
 
-HOT_FLIP_ATTACK_TRAIN_FILE =  path.join('data', 'hot_flip_attack_train.npy')
-HOT_FLIP_ATTACK_VAL_FILE =  path.join('data', 'hot_flip_attack_val.npy')
-HOT_FLIP_ATTACK_TEST_FILE =  path.join('data', 'hot_flip_attack_test.npy')
+#HOT_FLIP_ATTACK_TRAIN_FILE =  path.join('data', 'hot_flip_attack_train.npy')
+#HOT_FLIP_ATTACK_VAL_FILE =  path.join('data', 'hot_flip_attack_val.npy')
+#HOT_FLIP_ATTACK_TEST_FILE =  path.join('data', 'hot_flip_attack_test.npy')
 
 class HotFlipAttackData(object):
     def __init__(self, hot_flip_status ,sentence_ind):
@@ -51,14 +51,21 @@ class HotFlipAttack(object):
     def load_attack_from_file(self):
 
         hot_flip_attack_training = []
-        list_of_training_files = glob.glob(path.join(out.RESOURCES_DIR, 'data', 'split*hot_flip_attack_train.npy'))
+        list_of_training_files = glob.glob(path.join(out.RESOURCES_DIR, 'data', 'split*beam10_hot_flip_attack_train.npy'))
         for training_file in  list_of_training_files:
             loaded_file = np.load(training_file)
             for j in range( len(loaded_file) ):
-                hot_flip_attack_training.append(loaded_file[j])  #TODO must be better way
+                hot_flip_attack_training.append(loaded_file[j])
 
-        return hot_flip_attack_training,\
-               np.load(path.join(out.RESOURCES_DIR, HOT_FLIP_ATTACK_VAL_FILE))
+        hot_flip_attack_val = []
+        list_of_val_files = glob.glob(path.join(out.RESOURCES_DIR, 'data', 'split*beam10_hot_flip_attack_val.npy'))
+        for val_file in  list_of_val_files:
+            loaded_file = np.load(val_file)
+            for j in range( len(loaded_file) ):
+                hot_flip_attack_val.append(loaded_file[j])
+
+        return hot_flip_attack_training,hot_flip_attack_val #\
+               #np.load(path.join(out.RESOURCES_DIR, HOT_FLIP_ATTACK_VAL_FILE))
         #np.load(path.join(out.RESOURCES_DIR, HOT_FLIP_ATTACK_TEST_FILE))
 
     def get_file_name(self,dataset_type,split_num):
