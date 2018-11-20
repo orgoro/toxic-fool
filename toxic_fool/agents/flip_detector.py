@@ -376,7 +376,7 @@ def example():
         restore=False,
         restore_path=path.join(RES_OUT_DIR, 'flip_detector_2018-11-02_15-47-48/detector_model.ckpt-21780'))
     model = FlipDetector(sess, config=config)
-    model._validate(dataset)
+    #model._validate(dataset)
     model.train(dataset)
 
     seq = dataset.train_seq[0]
