@@ -2,9 +2,6 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import os
-os.environ["CUDA_VISIBLE_DEVICES"] = '1'
-
 from os import path
 import time
 from time import gmtime, strftime
@@ -22,7 +19,8 @@ from data.hot_flip_data_processor import HotFlipDataProcessor
 from resources import LATEST_DETECTOR_WEIGHTS
 from resources_out import RES_OUT_DIR
 from attacks.hot_flip_attack import HotFlipAttackData  ##needed to load hot flip data
-
+import os
+os.environ['CUDA_VISIBLE_DEVICES'] = "0"
 
 class FlipDetectorConfig(AgentConfig):
     # pylint: disable=too-many-arguments
@@ -374,9 +372,9 @@ def example():
     sess = tf.Session()
     config = FlipDetectorConfig(
         restore=False,
-        restore_path=path.join(RES_OUT_DIR, 'flip_detector_2018-11-02_15-47-48/detector_model.ckpt-21780'))
+        restore_path=path.join(RES_OUT_DIR, 'detector_flip_beam_10/detector_model.ckpt-84056'))
     model = FlipDetector(sess, config=config)
-    model._validate(dataset)
+    #model._validate(dataset)
     model.train(dataset)
 
     seq = dataset.train_seq[0]

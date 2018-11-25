@@ -12,9 +12,9 @@ from attacks.hot_flip import HotFlip
 import time
 import resources as out
 
-HOT_FLIP_ATTACK_TRAIN_FILE =  path.join('data', 'hot_flip_attack_train.npy')
-HOT_FLIP_ATTACK_VAL_FILE =  path.join('data', 'hot_flip_attack_val.npy')
-HOT_FLIP_ATTACK_TEST_FILE =  path.join('data', 'hot_flip_attack_test.npy')
+#HOT_FLIP_ATTACK_TRAIN_FILE =  path.join('data', 'hot_flip_attack_train.npy')
+#HOT_FLIP_ATTACK_VAL_FILE =  path.join('data', 'hot_flip_attack_val.npy')
+#HOT_FLIP_ATTACK_TEST_FILE =  path.join('data', 'hot_flip_attack_test.npy')
 
 class HotFlipAttackData(object):
     def __init__(self, hot_flip_status ,sentence_ind):
@@ -28,10 +28,14 @@ class HotFlipAttackData(object):
 
 
 class HotFlipAttack(object):
-    def __init__(self, model, num_of_seq_to_attack= None, debug=True):
+    def __init__(self, model, num_of_seq_to_attack= None, debug=True, beam_size = 10 , attack_mode = 'dup',
+                 stop_after_num_of_flips = True):
         self.model = model
         self.num_of_seq_to_attack = num_of_seq_to_attack
         self.debug=debug
+        self.attack_mode = attack_mode
+        self.beam_size = beam_size
+        self.stop_after_num_of_flips = stop_after_num_of_flips
 
     def create_data(self, hot_flip_status ,sentence_ind):
         curr_flip_status = hot_flip_status
@@ -51,18 +55,26 @@ class HotFlipAttack(object):
     def load_attack_from_file(self):
 
         hot_flip_attack_training = []
-        list_of_training_files = glob.glob(path.join(out.RESOURCES_DIR, 'data', 'split*hot_flip_attack_train.npy'))
+        list_of_training_files = glob.glob(path.join(out.RESOURCES_DIR, 'data',
+                                                     'split*beam5_hot_flip_attack_train.npy'))
         for training_file in  list_of_training_files:
             loaded_file = np.load(training_file)
             for j in range( len(loaded_file) ):
-                hot_flip_attack_training.append(loaded_file[j])  #TODO must be better way
+                hot_flip_attack_training.append(loaded_file[j])
 
-        return hot_flip_attack_training,\
-               np.load(path.join(out.RESOURCES_DIR, HOT_FLIP_ATTACK_VAL_FILE))
+        hot_flip_attack_val = []
+        list_of_val_files = glob.glob(path.join(out.RESOURCES_DIR, 'data', 'split*beam10_hot_flip_attack_val.npy'))
+        for val_file in  list_of_val_files:
+            loaded_file = np.load(val_file)
+            for j in range( len(loaded_file) ):
+                hot_flip_attack_val.append(loaded_file[j])
+
+        return hot_flip_attack_training,hot_flip_attack_val #\
+               #np.load(path.join(out.RESOURCES_DIR, HOT_FLIP_ATTACK_VAL_FILE))
         #np.load(path.join(out.RESOURCES_DIR, HOT_FLIP_ATTACK_TEST_FILE))
 
-    def get_file_name(self,dataset_type,split_num):
-        initial_file_name = 'split_' + str(split_num) + '_'
+    def get_file_name(self,dataset_type,split_num,attack_mode , beam_size):
+        initial_file_name = 'split_' + str(split_num) + '_' +str(attack_mode) + '_beam' + str(beam_size) + '_'
         if dataset_type == 'train':
             file_name_to_save = path.join('data', initial_file_name + 'hot_flip_attack_train.npy')
         else:
@@ -73,7 +85,8 @@ class HotFlipAttack(object):
 
     def attack(self,data_seq,labels):
 
-        hot_flip = HotFlip(model=self.model, debug=self.debug)
+        hot_flip = HotFlip(model=self.model, debug=self.debug, beam_search_size=self.beam_size,
+                           attack_mode=self.attack_mode, stop_after_num_of_flips=self.stop_after_num_of_flips)
 
         # init list
         list_of_hot_flip_attack = []
@@ -152,7 +165,9 @@ def example():
             list_of_hot_flip_attack = hot_flip_attack.attack(seq_to_attack,label_to_attack)
             #list_of_hot_flip_attack = []
             #save to file
-            file_name_to_save = hot_flip_attack.get_file_name(dataset_type , j)
+            file_name_to_save = hot_flip_attack.get_file_name(dataset_type , j,
+                                                              hot_flip_attack.attack_mode , hot_flip_attack.beam_size)
+
             hot_flip_attack.save_attack_to_file( list_of_hot_flip_attack ,  file_name_to_save )
 
             #to free memmory. i don't think it's really needed

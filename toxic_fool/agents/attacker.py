@@ -225,6 +225,31 @@ class Attacker(object):
         mask[MAX_SEQ - 1] = 0
         return mask
 
+    def attack_hot_flip_until_break(self,   seq, beam_size ,  sequence_idx=0):
+
+        time_before = time.time()
+
+
+
+        seq = seq.copy()
+        curr_seq = seq[sequence_idx]
+        hot_flip = HotFlip(model=self._tox_model , break_on_half=True,beam_search_size=beam_size)
+        best_flip_status, _ = hot_flip.attack(seq=np.expand_dims(curr_seq, 0))
+
+
+        sent_attacks = []
+        #reverse list
+        while best_flip_status.prev_flip_status != None: ##the original sentence has prev_flip_status = None
+            sent_attacks.append(best_flip_status.fliped_sent)
+            best_flip_status = best_flip_status.prev_flip_status
+
+        num_of_flips = len(sent_attacks)
+
+
+        time_for_attack = time.time() - time_before
+
+        return num_of_flips , [time_for_attack / float(num_of_flips)] * num_of_flips
+
     def attack_until_break(self,
                            model='random',
                            seq=None,
@@ -291,6 +316,8 @@ def example():
     # attacker.attack(seq=seq, model='detector', labels=label)
     random_cnt_list_moderate = list()
     hotflip_cnt_list_moderate = list()
+    hotflip_beam5_cnt_list_moderate = list()
+    hotflip_beam10_cnt_list_moderate = list()
     detector_cnt_list_moderate = list()
     atten_cnt_list_moderate = list()
     random_cnt_list_hard = list()
@@ -301,41 +328,58 @@ def example():
     detector_cant_untoxic_cnt = 0
     random_cant_untoxic_cnt = 0
     atten_cant_untoxic_cnt = 0
-    random_time_for_attack_list = list()
-    atten_time_for_attack_list = list()
+    # random_time_for_attack_list = list()
+    # atten_time_for_attack_list = list()
+    hotflip_beam5_time_for_attack_list = list()
+    hotflip_beam10_time_for_attack_list = list()
     detector_time_for_attack_list = list()
     hotflip_time_for_attack_list = list()
-    sentences_to_run = range(len(seq))
+    sentences_to_run = range(400)
     for j in range(len(sentences_to_run)):
         print("Working on sentence ", j)
         curr_seq = seq[sentences_to_run[j]]
         if attacker._tox_model.classify(np.expand_dims(curr_seq, 0))[0][0] < 0.5:
             continue
         ## Attack all models with moderate attack
-        # attacker.config.smart_replace = True
+        attacker.config.smart_replace = False
         attacker.config.flip_middle_letters_only = False
         attacker.config.flip_once_in_a_word = False
 
-        random_cnt_moderate, random_cant_untoxic, random_time_for_attack = attacker.attack_until_break(model='random',
-                                                                                                       seq=seq,
-                                                                                                       sequence_idx=
-                                                                                                       sentences_to_run[
-                                                                                                           j])
-        random_cnt_list_moderate.append(random_cnt_moderate)
-        random_time_for_attack_list.append(random_time_for_attack)
-        atten_cnt_moderate, atten_cant_untoxic, atten_time_for_attack = attacker.attack_until_break(model='atten',
-                                                                                                    seq=seq,
-                                                                                                    sequence_idx=
-                                                                                                    sentences_to_run[j])
-        atten_cnt_list_moderate.append(atten_cnt_moderate)
-        atten_time_for_attack_list.append(atten_time_for_attack)
+        # random_cnt_moderate, random_cant_untoxic, random_time_for_attack = attacker.attack_until_break(model='random',
+        #                                                                                                seq=seq,
+        #                                                                                                sequence_idx=
+        #                                                                                             sentences_to_run[
+        #                                                                                                    j])
+        # random_cnt_list_moderate.append(random_cnt_moderate)
+        # random_time_for_attack_list.append(random_time_for_attack)
+        # atten_cnt_moderate, atten_cant_untoxic, atten_time_for_attack = attacker.attack_until_break(model='atten',
+        #                                                                                             seq=seq,
+        #                                                                                             sequence_idx=
+        #                                                                                          sentences_to_run[j])
+        # atten_cnt_list_moderate.append(atten_cnt_moderate)
+        # atten_time_for_attack_list.append(atten_time_for_attack)
+        hotflip_beam10_cnt_moderate, hotflip_beam10_time_for_attack   = attacker.attack_hot_flip_until_break(seq=seq,
+                                                                        beam_size=10,  sequence_idx=sentences_to_run[j])
+
+        hotflip_beam10_cnt_list_moderate.append(hotflip_beam10_cnt_moderate)
+        hotflip_beam10_time_for_attack_list.append(hotflip_beam10_time_for_attack)
+
+
+        hotflip_beam5_cnt_moderate, hotflip_beam5_time_for_attack   = attacker.attack_hot_flip_until_break(seq=seq,
+                                                                        beam_size=5,  sequence_idx=sentences_to_run[j])
+        hotflip_beam5_cnt_list_moderate.append(hotflip_beam5_cnt_moderate)
+        hotflip_beam5_time_for_attack_list.append(hotflip_beam5_time_for_attack)
+
         hotflip_cnt_moderate, _, hotflip_time_for_attack = attacker.attack_until_break(model=
                                                                                        'hotflip',
                                                                                        seq=seq,
                                                                                        sequence_idx=sentences_to_run[j])
+
         hotflip_cnt_list_moderate.append(hotflip_cnt_moderate)
         hotflip_time_for_attack_list.append(hotflip_time_for_attack)
-        detector_cnt_moderate, detector_cant_untoxic, detector_time_for_attack = attacker.attack_until_break(
+
+
+        detector_cnt_moderate, _, detector_time_for_attack = attacker.attack_until_break(
             model='detector',
             seq=seq,
             sequence_idx=sentences_to_run[j])
@@ -345,56 +389,58 @@ def example():
         ## Attack with hotflip, no smart
         attacker.config.smart_replace = False
 
-        hotflip_cnt_no_smart, _, hotflip_time_for_attack = attacker.attack_until_break(model=
-                                                                                       'hotflip',
-                                                                                       seq=seq,
-                                                                                       sequence_idx=sentences_to_run[j])
-        hotflip_cnt_list_no_smart.append(hotflip_cnt_no_smart)
+        # hotflip_cnt_no_smart, _, hotflip_time_for_attack = attacker.attack_until_break(model=
+        #                                                                                'hotflip',
+        #                                                                                seq=seq,
+        #                                                                              sequence_idx=sentences_to_run[j])
+        # hotflip_cnt_list_no_smart.append(hotflip_cnt_no_smart)
 
         ## Attack all models, hard restrictions
-        attacker.config.smart_replace = True
-        attacker.config.flip_middle_letters_only = True
-        attacker.config.flip_once_in_a_word = True
+        # attacker.config.smart_replace = True
+        # attacker.config.flip_middle_letters_only = True
+        # attacker.config.flip_once_in_a_word = True
 
-        random_cnt_hard, random_cant_untoxic, random_time_for_attack = attacker.attack_until_break(model='random',
-                                                                                                   seq=seq,
-                                                                                                   sequence_idx=
-                                                                                                   sentences_to_run[j])
-        random_cnt_list_hard.append(random_cnt_hard)
-        random_time_for_attack_list.append(random_time_for_attack)
-        atten_cnt_hard, atten_cant_untoxic, atten_time_for_attack = attacker.attack_until_break(model='atten',
-                                                                                                seq=seq,
-                                                                                                sequence_idx=
-                                                                                                sentences_to_run[j])
-        atten_cnt_list_hard.append(atten_cnt_hard)
-        atten_time_for_attack_list.append(atten_time_for_attack)
-        hotflip_cnt_hard, _, hotflip_time_for_attack = attacker.attack_until_break(model=
-                                                                                   'hotflip',
-                                                                                   seq=seq,
-                                                                                   sequence_idx=sentences_to_run[j])
-        hotflip_cnt_list_hard.append(hotflip_cnt_hard)
-        hotflip_time_for_attack_list.append(hotflip_time_for_attack)
-        detector_cnt_hard, detector_cant_untoxic, detector_time_for_attack = attacker.attack_until_break(
-            model='detector',
-            seq=seq,
-            sequence_idx=
-            sentences_to_run[
-                j])
-
-        detector_cnt_list_hard.append(detector_cnt_hard)
-        detector_time_for_attack_list.append(detector_time_for_attack)
-        detector_cant_untoxic_cnt += detector_cant_untoxic
-        random_cant_untoxic_cnt += random_cant_untoxic
-        atten_cant_untoxic_cnt += atten_cant_untoxic
-        print("Random Cnt moderate: ", random_cnt_moderate)
-        print("Attention Cnt  moderate: ", atten_cnt_moderate)
+        # random_cnt_hard, random_cant_untoxic, random_time_for_attack = attacker.attack_until_break(model='random',
+        #                                                                                            seq=seq,
+        #                                                                                            sequence_idx=
+        #                                                                                          sentences_to_run[j])
+        # random_cnt_list_hard.append(random_cnt_hard)
+        # random_time_for_attack_list.append(random_time_for_attack)
+        # atten_cnt_hard, atten_cant_untoxic, atten_time_for_attack = attacker.attack_until_break(model='atten',
+        #                                                                                         seq=seq,
+        #                                                                                         sequence_idx=
+        #                                                                                         sentences_to_run[j])
+        # atten_cnt_list_hard.append(atten_cnt_hard)
+        # atten_time_for_attack_list.append(atten_time_for_attack)
+        # hotflip_cnt_hard, _, hotflip_time_for_attack = attacker.attack_until_break(model=
+        #                                                                            'hotflip',
+        #                                                                            seq=seq,
+        #                                                                            sequence_idx=sentences_to_run[j])
+        # hotflip_cnt_list_hard.append(hotflip_cnt_hard)
+        # hotflip_time_for_attack_list.append(hotflip_time_for_attack)
+        # detector_cnt_hard, detector_cant_untoxic, detector_time_for_attack = attacker.attack_until_break(
+        #     model='detector',
+        #     seq=seq,
+        #     sequence_idx=
+        #     sentences_to_run[
+        #         j])
+        #
+        # detector_cnt_list_hard.append(detector_cnt_hard)
+        # detector_time_for_attack_list.append(detector_time_for_attack)
+        # detector_cant_untoxic_cnt += detector_cant_untoxic
+        # random_cant_untoxic_cnt += random_cant_untoxic
+        # atten_cant_untoxic_cnt += atten_cant_untoxic
+        # print("Random Cnt moderate: ", random_cnt_moderate)
+        # print("Attention Cnt  moderate: ", atten_cnt_moderate)
         print("Hotflip Cnt  moderate: ", hotflip_cnt_moderate)
         print("Detector Cnt  moderate: ", detector_cnt_moderate)
-        print("Random Cnt hard: ", random_cnt_hard)
-        print("Attention Cnt  hard: ", atten_cnt_hard)
-        print("Hotflip Cnt  hard: ", hotflip_cnt_hard)
-        print("Detector Cnt  hard: ", detector_cnt_hard)
-        print("Hotflip no smart Cnt: ", hotflip_cnt_no_smart)
+        print("Hotflip beam5 Cnt  moderate: ", hotflip_beam5_cnt_moderate)
+        print("Hotflip beam10 Cnt  moderate: ", hotflip_beam10_cnt_moderate)
+        # print("Random Cnt hard: ", random_cnt_hard)
+        # print("Attention Cnt  hard: ", atten_cnt_hard)
+        # print("Hotflip Cnt  hard: ", hotflip_cnt_hard)
+        # print("Detector Cnt  hard: ", detector_cnt_hard)
+        #print("Hotflip no smart Cnt: ", hotflip_cnt_no_smart)
         if j % 100 == 99:
             np.save(path.join(RES_OUT_DIR, 'attack_dict.npy'), attacker.attack_list)
 
@@ -405,6 +451,8 @@ def example():
     print("Attention mean hard: ", np.mean(atten_cnt_list_hard))
     print("Num of sentences cant untoxic attention: ", str(atten_cant_untoxic_cnt))
     print("Hotflip mean moderate: ", np.mean(hotflip_cnt_list_moderate))
+    print("Hotflip beam 5 mean moderate: ", np.mean(hotflip_beam5_cnt_list_moderate))
+    print("Hotflip beam 10 mean moderate: ", np.mean(hotflip_beam10_cnt_list_moderate))
     print("Hotflip mean hard: ", np.mean(hotflip_cnt_list_hard))
     print("Hotflip mean no smart: ", np.mean(hotflip_cnt_list_no_smart))
     print("Hotflip time for attack: ", np.mean(np.concatenate(hotflip_time_for_attack_list)))
@@ -412,9 +460,14 @@ def example():
     print("Detector mean hard: ", np.mean(detector_cnt_list_hard))
     print("Num of sentences cant untoxic detector: ", str(detector_cant_untoxic_cnt))
     print("Detector time for attack: ", np.mean(np.concatenate(detector_time_for_attack_list)))
+    print("Hotflip beam 5 time for attack: ", np.mean(np.concatenate(hotflip_beam5_time_for_attack_list)))
+    print("Hotflip beam 10 time for attack: ", np.mean(np.concatenate(hotflip_beam10_time_for_attack_list)))
+
     flips_cnt = dict()
     flips_cnt['random_moderate'] = random_cnt_list_moderate
     flips_cnt['hotflip_moderate'] = hotflip_cnt_list_moderate
+    flips_cnt['hotflip_beam5_moderate'] = hotflip_beam5_cnt_list_moderate
+    flips_cnt['hotflip_beam10_moderate'] = hotflip_beam10_cnt_list_moderate
     flips_cnt['detector_moderate'] = detector_cnt_list_moderate
     flips_cnt['atten_moderate'] = atten_cnt_list_moderate
     flips_cnt['random_hard'] = random_cnt_list_hard

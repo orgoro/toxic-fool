@@ -26,7 +26,7 @@ class FlipStatus(object):
     #class that hold the curr flip status of the sentence
     #pylint: disable=too-many-arguments
     def __init__(self, fliped_sent, curr_score,index_of_char_to_flip = None,char_to_flip_to = None,orig_sent = None,
-                 grads_in_fliped_char = None, max_flip_grad_per_char=None, prev_flip_status = None):
+                 grads_in_fliped_char = None, max_flip_grad_per_char=None, prev_flip_status = None,mask = None):
         self.fliped_sent = fliped_sent
         self.curr_score = curr_score
         self.index_of_char_to_flip = index_of_char_to_flip
@@ -35,11 +35,13 @@ class FlipStatus(object):
         self.grads_in_fliped_char = grads_in_fliped_char
         self.max_flip_grad_per_char = max_flip_grad_per_char # i think it shouldn't be in use.
         self.prev_flip_status = prev_flip_status
+        self.mask = mask
 
 class HotFlip(object):
     # pylint: disable=too-many-arguments
-    def __init__(self, model , num_of_char_to_flip = 9, beam_search_size = 5, attack_threshold = 0.15,debug=True,
-                 only_smart_replace_allowed = False, replace_only_letters_to_letters = True, attack_mode = 'flip'):
+    def __init__(self, model , num_of_char_to_flip = 400, beam_search_size = 5, attack_threshold = 0.10,debug=True,
+                 only_smart_replace_allowed = False, replace_only_letters_to_letters = True, attack_mode = 'flip',
+                 break_on_half = False, stop_after_num_of_flips = False , num_max_flips = 20):
         self.tox_model = model
         self.num_of_char_to_flip = num_of_char_to_flip
         self.beam_search_size = beam_search_size
@@ -48,6 +50,9 @@ class HotFlip(object):
         self.only_smart_replace_allowed = only_smart_replace_allowed
         self.replace_only_letters_to_letters = replace_only_letters_to_letters
         self.attack_mode = attack_mode
+        self.break_on_half = break_on_half
+        self.stop_after_num_of_flips = stop_after_num_of_flips
+        self.num_max_flips = num_max_flips
 
     #get min score in the beam search
     def get_min_score_in_beam(self, beam_best_flip):
@@ -72,9 +77,9 @@ class HotFlip(object):
 
         return best_flip_status
 
-    def create_initial_beam_search_database(self,curr_squeeze_seq):
+    def create_initial_beam_search_database(self,curr_squeeze_seq,mask):
         beam_best_flip = []
-        original_sentence_flip_status = FlipStatus(fliped_sent=curr_squeeze_seq, curr_score=0)
+        original_sentence_flip_status = FlipStatus(fliped_sent=curr_squeeze_seq, curr_score=0,mask=mask)
         beam_best_flip.append(original_sentence_flip_status)
 
         return beam_best_flip
@@ -144,17 +149,29 @@ class HotFlip(object):
         curr_squeeze_seq = squeeze_seq.copy()
 
         # create initial the beam search database
-        beam_best_flip = self.create_initial_beam_search_database(curr_squeeze_seq)
+        beam_best_flip = self.create_initial_beam_search_database(curr_squeeze_seq,mask)
+
+
+        setence_length_10_per = int(np.sum(curr_squeeze_seq != 0) / 10)
 
         # loop on the amount of char to flip
-        for _ in range(self.num_of_char_to_flip):
+        for num_of_flips in range(self.num_of_char_to_flip):
 
             # get best flip from beam
             best_hot_flip_status = self.get_best_hot_flip(beam_best_flip)
             curr_class = self.tox_model.classify(np.expand_dims(best_hot_flip_status.fliped_sent, 0))[0][0]
             if self.debug:
                 print("curr class: ", curr_class)
+            if curr_class < 0.5 and num_of_flips >= setence_length_10_per:
+                break
+
             if curr_class < self.attack_threshold:
+                break
+
+            if self.break_on_half and curr_class < 0.5:
+                break
+
+            if self.stop_after_num_of_flips and num_of_flips > self.num_max_flips:
                 break
 
             #copy the curr database in order not to iterate over the changed database
@@ -167,7 +184,7 @@ class HotFlip(object):
                 # get grad
                 char_grad_tox = self.get_char_grad_from_seq(tox_model, embedding_matrix, curr_squeeze_seq)
 
-                index_of_char_allowed_to_flip = np.argwhere( mask == 1).squeeze(1)
+                index_of_char_allowed_to_flip = np.argwhere( curr_flip.mask == 1).squeeze(1)
 
                 if self.attack_mode == 'flip':
                     #flip attack
@@ -229,7 +246,8 @@ class HotFlip(object):
                                              orig_sent=curr_squeeze_seq.copy(),
                                              grads_in_fliped_char=None, #TODO
                                              max_flip_grad_per_char=None, #TODO remove
-                                             prev_flip_status=curr_flip)
+                                             prev_flip_status=curr_flip,
+                                             mask =  curr_flip.mask) #TODO
 
                 if len(beam_best_flip) < self.beam_search_size:
                     beam_best_flip.append(new_flip_status)
@@ -334,6 +352,9 @@ class HotFlip(object):
                     fliped_squeeze_seq = curr_squeeze_seq.copy()
                     fliped_squeeze_seq[index_of_char_to_flip] = char_to_flip_to
 
+                    updated_mask = curr_flip.mask.copy()
+                    updated_mask[index_of_char_to_flip] = 0
+
                     new_flip_status = FlipStatus(fliped_sent=fliped_squeeze_seq,
                                                  curr_score=curr_score,
                                                  index_of_char_to_flip=index_of_char_to_flip,
@@ -341,7 +362,8 @@ class HotFlip(object):
                                                  orig_sent=curr_squeeze_seq.copy(),
                                                  grads_in_fliped_char=flip_grad_matrix[i],
                                                  max_flip_grad_per_char=max_flip_grad_per_char,
-                                                 prev_flip_status=curr_flip)
+                                                 prev_flip_status=curr_flip,
+                                                 mask = updated_mask)
 
                     if len(beam_best_flip) < self.beam_search_size:
                         beam_best_flip.append(new_flip_status)
