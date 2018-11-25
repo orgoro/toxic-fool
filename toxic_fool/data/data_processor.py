@@ -69,7 +69,7 @@ class DataProcessor(object):
         # self._test_l = pd.read_csv(test_l)
         self._max_seq_len = 500
         self._max_data_len = 400
-        self._tokenizer = text.Tokenizer(char_level=True, lower=True)  # TODO: max number of words
+        self._tokenizer = text.Tokenizer(char_level=True, lower=False)  # TODO: max number of words
 
         self.processed = False  # True after data processing
         self._clean_words = clean_text
