@@ -8,11 +8,10 @@ from os import path
 from collections import defaultdict
 import numpy as np
 
-from resources_out import RES_OUT_DIR
 import resources as res
 
 
-def analyze_forms(form_paths, output_path=RES_OUT_DIR):
+def analyze_forms(form_paths):
     assert isinstance(form_paths, list), 'forms paths should be a list'
     for form_path in form_paths:
         assert path.exists(form_path), 'form does not exist: {}'.format(form_path)
