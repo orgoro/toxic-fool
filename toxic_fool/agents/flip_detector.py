@@ -157,17 +157,8 @@ class FlipDetector(Agent):
         self.build_summary_op()
 
     def _build_lstm(self, embeded, num_class, num_units):
-        with tf.name_scope("BiLSTM"):
-            with tf.variable_scope('forward'):
-                lstm_fw_cell = tf.nn.rnn_cell.LSTMCell(num_units, forget_bias=1.0, state_is_tuple=True)
-            with tf.variable_scope('backward'):
-                lstm_bw_cell = tf.nn.rnn_cell.LSTMCell(num_units, forget_bias=1.0, state_is_tuple=True)
-            (output_fw, output_bw), _ = tf.nn.bidirectional_dynamic_rnn(cell_fw=lstm_fw_cell,
-                                                                        cell_bw=lstm_bw_cell,
-                                                                        inputs=embeded,
-                                                                        dtype=tf.float32,
-                                                                        scope="BiLSTM")
-        lstm_output = tf.concat((output_fw, output_bw), axis=2)
+        lstm_cell = tf.keras.layers.CuDNNLSTM(num_units, unit_forget_bias=True, return_sequences=True)
+        lstm_output = tf.keras.layers.Bidirectional(lstm_cell)(embeded)
         state_vec = tf.reshape(lstm_output, [-1, num_class, 2 * num_units])
         return state_vec
 
@@ -367,8 +358,8 @@ class FlipDetector(Agent):
         return np.argmax(select_probs, 1)[0], select_probs[0]
 
 def example():
-    dataset = HotFlipDataProcessor.get_detector_selector_datasets()
-    _, char_idx, _ = data.Dataset.init_embedding_from_dump()
+    # dataset = HotFlipDataProcessor.get_detector_selector_datasets()
+    # _, char_idx, _ = data.Dataset.init_embedding_from_dump()
     sess = tf.Session()
     config = FlipDetectorConfig(
         restore=False,
