@@ -56,8 +56,8 @@ def _print_summary(results_read, results_tox):
     print(f'question_class\t\t\t |\treadable results |\tcount')
     print('-' * 65)
     for q_class, val_list in results_read.items():
-        avg_readability = np.mean(np.asarray(val_list))
-        std_readability = np.std(np.asarray(val_list))
+        avg_readability = np.mean(np.asarray(val_list)/5)
+        std_readability = np.std(np.asarray(val_list)/5)
         count = len(val_list)
         print(f'{q_class}|\t{avg_readability:01.3f} (+/- {std_readability:1.3f})|\t{count}')
     print('-' * 65)
@@ -65,8 +65,8 @@ def _print_summary(results_read, results_tox):
     print(f'question_class\t\t\t |\ttoxicity results |\tcount')
     print('-' * 65)
     for q_class, val_list in results_tox.items():
-        avg_toxicity = np.mean(np.asarray(val_list))
-        std_toxicity = np.std(np.asarray(val_list))
+        avg_toxicity = np.mean(np.asarray(val_list)/5)
+        std_toxicity = np.std(np.asarray(val_list)/5)
         count = len(val_list)
         print(f'{q_class:25}|\t{avg_toxicity:1.3f} (+/- {std_toxicity:1.3f})|\t{count}')
 
@@ -86,5 +86,5 @@ def _get_q_class(q_idx):
 
 
 if __name__ == '__main__':
-    analyze_forms([res.FORMS_COL3, res.FORMS_COL1])
+    analyze_forms([res.FORMS_COL3, res.FORMS_COL2, res.FORMS_COL1])
     # fire.Fire(analyze_forms)
